@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------
+#  The first stage container, for building the application
+# ---------------------------------------------------------------------
+FROM golang:1.15-alpine as builder
+
+ENV CGO_ENABLED=0
+ENV GO111MODULE=on
+ENV GOOS=linux
+
+RUN apk --no-cache add ca-certificates
+RUN apk add --update git
+
+RUN mkdir -p $GOPATH/src/github.com/aopoltorzhicky/watch_tower/
+
+COPY ./go.* $GOPATH/src/github.com/aopoltorzhicky/watch_tower/
+WORKDIR $GOPATH/src/github.com/aopoltorzhicky/watch_tower/
+RUN go mod download
+
+COPY cmd/watch_tower cmd/watch_tower
+COPY internal internal
+
+WORKDIR $GOPATH/src/github.com/aopoltorzhicky/watch_tower/cmd/watch_tower/
+RUN go build -a -installsuffix cgo -o /go/bin/watch_tower .
+
+# ---------------------------------------------------------------------
+#  The second stage container, for running the application
+# ---------------------------------------------------------------------
+FROM scratch
+
+WORKDIR /app/watch_tower
+ENV GOPATH=$GOPATH
+
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /go/bin/watch_tower /go/bin/watch_tower
+COPY cmd/watch_tower/config.yml /app/watch_tower/
+COPY cmd/watch_tower/abi/ /app/watch_tower/abi/
+
+ENTRYPOINT ["/go/bin/watch_tower", "-c", "config.yml"]

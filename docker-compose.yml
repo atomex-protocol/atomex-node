@@ -1,0 +1,10 @@
+version: "3.6"
+
+services:
+  watch_tower:
+    image: aopoltorzhicky/watch_tower:${TAG:-latest}
+    build:
+        dockerfile: build/Dockerfile
+        context: .
+    restart: always
+    env_file: .env
