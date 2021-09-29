@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/aopoltorzhicky/watch_tower/internal/chain"
+	"github.com/atomex-protocol/watch_tower/internal/chain"
 )
 
 // Swap -

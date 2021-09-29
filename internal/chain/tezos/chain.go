@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aopoltorzhicky/watch_tower/internal/chain"
-	"github.com/aopoltorzhicky/watch_tower/internal/config"
+	"github.com/atomex-protocol/watch_tower/internal/chain"
+	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/dipdup-net/go-lib/tzkt/api"
 	"github.com/dipdup-net/go-lib/tzkt/events"
 	"github.com/mitchellh/mapstructure"

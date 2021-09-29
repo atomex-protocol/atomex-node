@@ -1,4 +1,4 @@
-module github.com/aopoltorzhicky/watch_tower
+module github.com/atomex-protocol/watch_tower
 
 go 1.16
 

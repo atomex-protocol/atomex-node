@@ -6,12 +6,12 @@ services:
     build:
       context: .
       dockerfile: build/Dockerfile
+      args:
+        - config_file=config.test.yml
     restart: unless-stopped
     deploy:
       mode: replicated
       replicas: 1
-    environment:
-      CONFIG: config.test.yml
     secrets:
       - watch-tower
 

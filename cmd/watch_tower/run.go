@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aopoltorzhicky/watch_tower/internal/config"
+	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/rs/zerolog/log"
 )
 

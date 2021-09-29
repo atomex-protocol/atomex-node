@@ -2,9 +2,11 @@ version: "3.6"
 
 services:
   watch_tower:
-    image: aopoltorzhicky/watch_tower:${TAG:-latest}
+    image: atomex-protocol/watch_tower:${TAG:-latest}
     build:
         dockerfile: build/Dockerfile
         context: .
+        args:
+          - config_file=config.yml
     restart: always
     env_file: .env

@@ -1,6 +1,6 @@
 package tezos
 
-import "github.com/aopoltorzhicky/watch_tower/internal/chain"
+import "github.com/atomex-protocol/watch_tower/internal/chain"
 
 func toOperationStatus(status string) chain.OperationStatus {
 	switch status {

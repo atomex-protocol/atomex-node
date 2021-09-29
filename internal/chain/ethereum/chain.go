@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aopoltorzhicky/watch_tower/internal/chain"
-	"github.com/aopoltorzhicky/watch_tower/internal/config"
+	"github.com/atomex-protocol/watch_tower/internal/chain"
+	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/ethereum/go-ethereum"
 	abi "github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"

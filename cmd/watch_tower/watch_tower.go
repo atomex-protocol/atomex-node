@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aopoltorzhicky/watch_tower/internal/chain"
-	"github.com/aopoltorzhicky/watch_tower/internal/chain/ethereum"
-	"github.com/aopoltorzhicky/watch_tower/internal/chain/tezos"
-	"github.com/aopoltorzhicky/watch_tower/internal/config"
+	"github.com/atomex-protocol/watch_tower/internal/chain"
+	"github.com/atomex-protocol/watch_tower/internal/chain/ethereum"
+	"github.com/atomex-protocol/watch_tower/internal/chain/tezos"
+	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
