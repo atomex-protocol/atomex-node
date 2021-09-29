@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -52,7 +51,12 @@ func New(cfg config.Tezos) (*Tezos, error) {
 		return nil, err
 	}
 
-	key, err := keys.FromBase58(os.Getenv("TEZOS_PRIVATE"), keys.Ed25519)
+	secret, err := chain.LoadSecret("TEZOS_PRIVATE")
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := keys.FromBase58(secret, keys.Ed25519)
 	if err != nil {
 		return nil, err
 	}

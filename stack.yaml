@@ -1,0 +1,18 @@
+version: '3.4'
+
+services: 
+  watch-tower:
+    image: ${DOCKER_REGISTRY:-atomex}/watch-tower
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+    restart: unless-stopped
+    deploy:
+      mode: replicated
+      replicas: 1
+    secrets:
+      - watch-tower
+
+secrets:
+  watch-tower:
+    external: true

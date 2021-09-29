@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"math/big"
-	"os"
 	"sync"
 	"time"
 
@@ -104,7 +103,11 @@ func New(cfg config.Ethereum) (*Ethereum, error) {
 }
 
 func initKeystore(cfg config.Ethereum, e *Ethereum) error {
-	privateKey, err := crypto.HexToECDSA(os.Getenv("ETHEREUM_PRIVATE"))
+	secret, err := chain.LoadSecret("ETHEREUM_PRIVATE")
+	if err != nil {
+		return err
+	}
+	privateKey, err := crypto.HexToECDSA(secret)
 	if err != nil {
 		return err
 	}
