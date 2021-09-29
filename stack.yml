@@ -10,7 +10,7 @@ services:
     deploy:
       mode: replicated
       replicas: 1
-    env:
+    environment:
       CONFIG: config.test.yml
     secrets:
       - watch-tower
