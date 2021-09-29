@@ -1,5 +1,5 @@
 # Watch Tower
-[![Build Status](https://github.com/atomex-protocol/watch-tower/workflows/ci/badge.svg)](https://github.com/atomex-protocol/watch-tower/actions?query=branch%3Amaster+workflow%3A%22build%22)
+[![Build Status](https://github.com/atomex-protocol/watch-tower/workflows/CI/badge.svg)](https://github.com/atomex-protocol/watch-tower/actions?query=branch%3Amaster+workflow%3A%22build%22)
 [![made_with golang](https://img.shields.io/badge/made_with-golang-blue.svg)](https://golang.org/)
 
 Watch tower is atomex module which sends client's redeem  or refund transactions.
