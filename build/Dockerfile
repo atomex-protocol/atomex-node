@@ -29,10 +29,11 @@ FROM scratch
 
 WORKDIR /app/watch_tower
 ENV GOPATH=$GOPATH
+ENV CONFIG=$CONFIG
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /go/bin/watch_tower /go/bin/watch_tower
-COPY cmd/watch_tower/config.yml /app/watch_tower/
+COPY cmd/watch_tower/$CONFIG /app/watch_tower/
 COPY cmd/watch_tower/abi/ /app/watch_tower/abi/
 
-ENTRYPOINT ["/go/bin/watch_tower", "-c", "config.yml"]
+ENTRYPOINT ["/go/bin/watch_tower", "-c", "$CONFIG"]
