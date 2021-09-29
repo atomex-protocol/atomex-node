@@ -21,7 +21,7 @@ To set private keys you should pass environment variables to docker container or
 By default `.env` file is expected in docker-compose.
 
 
-### Build
+## Build
 
 You can build binary from source
 
@@ -39,7 +39,7 @@ docker-compose up -d --build watch_tower
 make up
 ```
 
-### Config
+## Config
 
 Example:
 
@@ -84,7 +84,7 @@ types:
     * `min_payoff` - minimal pay off for processing in wei (*0* by default. Type: **string**)
 
 
-### Architecture
+## Architecture
 
   Logically program consists of 2 parts: blockchain listeners and watch tower.
   Blockchain listeners get new transactions, prepare it and send events by channels.
