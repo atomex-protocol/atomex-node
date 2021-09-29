@@ -10,16 +10,16 @@ ENV GOOS=linux
 RUN apk --no-cache add ca-certificates
 RUN apk add --update git
 
-RUN mkdir -p $GOPATH/src/github.com/aopoltorzhicky/watch_tower/
+RUN mkdir -p $GOPATH/src/github.com/atomex-protocol/watch_tower/
 
-COPY ./go.* $GOPATH/src/github.com/aopoltorzhicky/watch_tower/
-WORKDIR $GOPATH/src/github.com/aopoltorzhicky/watch_tower/
+COPY ./go.* $GOPATH/src/github.com/atomex-protocol/watch_tower/
+WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/
 RUN go mod download
 
 COPY cmd/watch_tower cmd/watch_tower
 COPY internal internal
 
-WORKDIR $GOPATH/src/github.com/aopoltorzhicky/watch_tower/cmd/watch_tower/
+WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/cmd/watch_tower/
 RUN go build -a -installsuffix cgo -o /go/bin/watch_tower .
 
 # ---------------------------------------------------------------------
