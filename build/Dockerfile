@@ -22,7 +22,6 @@ COPY internal internal
 
 WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/cmd/watch_tower/
 RUN go build -a -installsuffix cgo -o /go/bin/watch_tower .
-RUN /bin/sh -c 'echo $config_file'
 
 # ---------------------------------------------------------------------
 #  The second stage container, for running the application
