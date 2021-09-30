@@ -1,10 +1,10 @@
 tezos:
   node: https://rpc.tzkt.io/granadanet
   tzkt: https://api.granadanet.tzkt.io
-  contract: KT1DMsMEwQJ5THj9WdZNt2KxVtJxoEqBtLPT
+  contract: KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J
   tokens:
     - KT1KHdx4EC7WNVeeTGMr8utCSRczgu2EPCzX
-    - KT1VXbgYkHwYVoJMpLU6n5T8wysTxBgeeMNN
+    - KT1UrqceFxiLbrLdWESwqgSfpZqrjLp7cKPf
   min_payoff: "0"
 ethereum:
   node: https://ropsten.infura.io/v3/c472af462a664d93a4ca3962ae5e3749
