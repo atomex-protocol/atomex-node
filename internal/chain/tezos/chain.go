@@ -394,7 +394,7 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 
 	switch bigMapUpdate.Action {
 	case BigMapActionAddKey:
-		refundTime, err := time.Parse(time.RFC3339, value.Settings.RefundTime)
+		refundTime, err := time.Parse(time.RFC3339, value.RefundTime)
 		if err != nil {
 			return err
 		}
@@ -405,12 +405,12 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 				Chain:        chain.ChainTypeTezos,
 				Contract:     bigMapUpdate.Contract.Address,
 			},
-			Initiator:   value.Recipients.Initiator,
-			Participant: value.Recipients.Participant,
+			Initiator:   value.Initiator,
+			Participant: value.Participant,
 			RefundTime:  refundTime,
 		}
 
-		if err := event.SetPayOff(value.Settings.Payoff, t.minPayoff); err != nil {
+		if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 			if errors.Is(err, chain.ErrMinPayoff) {
 				log.Warn().Str("hashed_secret", event.HashedSecret.String()).Msg("skip because of small pay off")
 				return nil
@@ -418,7 +418,7 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 			return err
 		}
 
-		if err := event.SetAmountFromString(value.Settings.Amount); err != nil {
+		if err := event.SetAmountFromString(value.Amount); err != nil {
 			return err
 		}
 
@@ -576,7 +576,7 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 		return err
 	}
 
-	refundTime, err := time.Parse(time.RFC3339, value.Settings.RefundTime)
+	refundTime, err := time.Parse(time.RFC3339, value.RefundTime)
 	if err != nil {
 		return err
 	}
@@ -587,12 +587,12 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 			Chain:        chain.ChainTypeTezos,
 			Contract:     contract,
 		},
-		Initiator:   value.Recipients.Initiator,
-		Participant: value.Recipients.Participant,
+		Initiator:   value.Initiator,
+		Participant: value.Participant,
 		RefundTime:  refundTime,
 	}
 
-	if err := event.SetPayOff(value.Settings.Payoff, t.minPayoff); err != nil {
+	if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 		if errors.Is(err, chain.ErrMinPayoff) {
 			log.Warn().Str("hashed_secret", event.HashedSecret.String()).Msg("skip because of small pay off")
 			return nil
@@ -600,7 +600,7 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 		return err
 	}
 
-	if err := event.SetAmountFromString(value.Settings.Amount); err != nil {
+	if err := event.SetAmountFromString(value.Amount); err != nil {
 		return err
 	}
 
