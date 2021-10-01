@@ -180,24 +180,18 @@ func (wt *WatchTower) listen() {
 func (wt *WatchTower) onInit(event chain.InitEvent) error {
 	swap := wt.getSwap(event.Event)
 	swap.FromInitEvent(event)
-
-	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) onRedeem(event chain.RedeemEvent) error {
 	swap := wt.getSwap(event.Event)
 	swap.FromRedeemEvent(event)
-
-	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) onRefund(event chain.RefundEvent) error {
 	swap := wt.getSwap(event.Event)
 	swap.FromRefundEvent(event)
-
-	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 	return wt.processSwap(swap)
 }
 
@@ -211,6 +205,8 @@ func (wt *WatchTower) getSwap(event chain.Event) *Swap {
 }
 
 func (wt *WatchTower) processSwap(swap *Swap) error {
+	swap.log()
+
 	if swap.RetryCount >= wt.retryCount {
 		delete(wt.swaps, swap.HashedSecret)
 		log.Info().Str("hashed_secret", swap.HashedSecret.String()).Msg("swap retry count transaction exceeded")

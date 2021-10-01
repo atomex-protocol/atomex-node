@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
+	log "github.com/rs/zerolog/log"
 )
 
 // Swap -
@@ -25,6 +26,15 @@ func NewSwap(event chain.Event) *Swap {
 		Contract:     event.Contract,
 		Status:       StatusEmpty,
 	}
+}
+
+func (swap *Swap) log() {
+	log.Info().
+		Str("hashed_secret", swap.HashedSecret.String()).
+		Str("status", swap.Status.String()).
+		Str("initiator_chain", swap.Initiator.ChainType.String()).
+		Str("acceptor_chain", swap.Acceptor.ChainType.String()).
+		Msg("swap info")
 }
 
 // FromInitEvent -
