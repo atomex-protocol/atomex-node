@@ -3,7 +3,6 @@ package ethereum
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
 	"math/big"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 )
@@ -113,9 +113,21 @@ func initKeystore(cfg config.Ethereum, e *Ethereum) error {
 	}
 	e.privateKey = privateKey
 
-	log.Info().Str("address", cfg.UserAddress).Str("blockchain", chain.ChainTypeEthereum.String()).Msg("using address")
+	log.Info().Str("blockchain", chain.ChainTypeEthereum.String()).Str("address", cfg.UserAddress).Msg("using address")
 
 	return nil
+}
+
+func (e *Ethereum) info() *zerolog.Event {
+	return log.Info().Str("blockchain", chain.ChainTypeEthereum.String())
+}
+
+func (e *Ethereum) warn() *zerolog.Event {
+	return log.Warn().Str("blockchain", chain.ChainTypeEthereum.String())
+}
+
+func (e *Ethereum) err() *zerolog.Event {
+	return log.Error().Str("blockchain", chain.ChainTypeEthereum.String())
 }
 
 // Run -
@@ -158,6 +170,7 @@ func (e *Ethereum) Run() error {
 
 // Close -
 func (e *Ethereum) Close() error {
+	e.info().Msg("closing...")
 	e.stop <- struct{}{}
 	e.wg.Wait()
 
@@ -297,18 +310,18 @@ func (e *Ethereum) buildTxOpts() (*bind.TransactOpts, error) {
 
 // Restore -
 func (e *Ethereum) Restore() error {
+	e.info().Msg("restoring...")
 	if err := e.restoreEth(); err != nil {
 		return err
 	}
 	if err := e.restoreErc20(); err != nil {
 		return err
 	}
+	e.info().Msg("restored")
 	return nil
 }
 
 func (e *Ethereum) restoreEth() error {
-	events := make(map[string]chain.InitEvent)
-
 	iterInit, err := e.eth.FilterInitiated(nil, nil, nil)
 	if err != nil {
 		return err
@@ -320,7 +333,7 @@ func (e *Ethereum) restoreEth() error {
 			continue
 		}
 
-		events[hashedSecret.String()] = chain.InitEvent{
+		e.initChan <- chain.InitEvent{
 			Event: chain.Event{
 				HashedSecret: hashedSecret,
 				Contract:     e.cfg.EthAddress,
@@ -342,8 +355,14 @@ func (e *Ethereum) restoreEth() error {
 		return err
 	}
 	for iterRedeemed.Next() {
-		hashedSecret := hex.EncodeToString(iterRedeemed.Event.HashedSecret[:])
-		delete(events, hashedSecret)
+		e.redeemChan <- chain.RedeemEvent{
+			Event: chain.Event{
+				HashedSecret: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
+				Contract:     e.cfg.EthAddress,
+				Chain:        chain.ChainTypeEthereum,
+			},
+			Secret: chain.Hex(iterRedeemed.event),
+		}
 	}
 	if err := iterRedeemed.Close(); err != nil {
 		return err
@@ -354,40 +373,31 @@ func (e *Ethereum) restoreEth() error {
 		return err
 	}
 	for iterRefunded.Next() {
-		hashedSecret := hex.EncodeToString(iterRefunded.Event.HashedSecret[:])
-		delete(events, hashedSecret)
+		hashedSecret := chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret)
+		e.refundChan <- chain.RefundEvent{
+			Event: chain.Event{
+				HashedSecret: hashedSecret,
+				Contract:     e.cfg.EthAddress,
+				Chain:        chain.ChainTypeEthereum,
+			},
+		}
 	}
 	if err := iterRefunded.Close(); err != nil {
 		return err
-	}
-
-	log.Info().Int("count", len(events)).Msg("initiated swaps found in eth")
-
-	for hashedSecret, event := range events {
-		e.initChan <- event
-		delete(events, hashedSecret)
 	}
 
 	return nil
 }
 
 func (e *Ethereum) restoreErc20() error {
-	events := make(map[string]chain.InitEvent)
-
 	iterInit, err := e.erc20.FilterInitiated(nil, nil, nil, nil)
 	if err != nil {
 		return err
 	}
 	for iterInit.Next() {
-		hashedSecret := chain.NewHexFromBytes32(iterInit.Event.HashedSecret)
-
-		if e.minPayoff.Cmp(iterInit.Event.Payoff) > 0 {
-			continue
-		}
-
-		events[hashedSecret.String()] = chain.InitEvent{
+		e.initChan <- chain.InitEvent{
 			Event: chain.Event{
-				HashedSecret: hashedSecret,
+				HashedSecret: chain.NewHexFromBytes32(iterInit.Event.HashedSecret),
 				Contract:     e.cfg.Erc20Address,
 				Chain:        chain.ChainTypeEthereum,
 			},
@@ -407,8 +417,14 @@ func (e *Ethereum) restoreErc20() error {
 		return err
 	}
 	for iterRedeemed.Next() {
-		hashedSecret := hex.EncodeToString(iterRedeemed.Event.HashedSecret[:])
-		delete(events, hashedSecret)
+		e.redeemChan <- chain.RedeemEvent{
+			Event: chain.Event{
+				HashedSecret: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
+				Contract:     e.cfg.Erc20Address,
+				Chain:        chain.ChainTypeEthereum,
+			},
+			Secret: chain.Hex(iterRedeemed.event),
+		}
 	}
 	if err := iterRedeemed.Close(); err != nil {
 		return err
@@ -419,18 +435,17 @@ func (e *Ethereum) restoreErc20() error {
 		return err
 	}
 	for iterRefunded.Next() {
-		hashedSecret := hex.EncodeToString(iterRefunded.Event.HashedSecret[:])
-		delete(events, hashedSecret)
+		hashedSecret := chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret)
+		e.refundChan <- chain.RefundEvent{
+			Event: chain.Event{
+				HashedSecret: hashedSecret,
+				Contract:     e.cfg.Erc20Address,
+				Chain:        chain.ChainTypeEthereum,
+			},
+		}
 	}
 	if err := iterRefunded.Close(); err != nil {
 		return err
-	}
-
-	log.Info().Int("count", len(events)).Msg("initiated swaps found in erc20")
-
-	for hashedSecret, event := range events {
-		e.initChan <- event
-		delete(events, hashedSecret)
 	}
 
 	return nil
@@ -481,16 +496,16 @@ func (e *Ethereum) listen() {
 			return
 		case l := <-e.logs:
 			if err := e.parseLog(l); err != nil {
-				log.Err(err).Msg("")
+				e.err().Err(err).Msg("")
 			}
 		case head := <-e.head:
 			if err := e.parseHead(head); err != nil {
-				log.Err(err).Msg("")
+				e.err().Err(err).Msg("")
 			}
 		case err := <-e.subLogs.Err():
-			log.Err(err).Msg("ethereum subscription error")
+			e.err().Err(err).Msg("ethereum subscription error")
 		case err := <-e.subHead.Err():
-			log.Err(err).Msg("ethereum subscription error")
+			e.err().Err(err).Msg("ethereum subscription error")
 		}
 	}
 }
@@ -507,7 +522,7 @@ func (e *Ethereum) handleInitiated(abi *abi.ABI, l types.Log, event *abi.Event, 
 		}
 		hashedSecret := chain.Hex(l.Topics[1].Hex()[2:])
 		if e.minPayoff.Cmp(args.PayOff) > 0 {
-			log.Warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
+			e.warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
 			return nil
 		}
 
@@ -534,7 +549,7 @@ func (e *Ethereum) handleInitiated(abi *abi.ABI, l types.Log, event *abi.Event, 
 
 		hashedSecret := chain.Hex(l.Topics[1].Hex()[2:])
 		if e.minPayoff.Cmp(args.PayOff) > 0 {
-			log.Warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
+			e.warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
 			return nil
 		}
 

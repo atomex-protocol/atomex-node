@@ -24,9 +24,10 @@ type WatchTower struct {
 	needRefund bool
 	retryCount uint
 
-	stopped bool
-	stop    chan struct{}
-	wg      sync.WaitGroup
+	restoring bool
+	stopped   bool
+	stop      chan struct{}
+	wg        sync.WaitGroup
 }
 
 // NewWatchTower -
@@ -86,17 +87,21 @@ func (wt *WatchTower) Run(restore bool) error {
 }
 
 func (wt *WatchTower) restore() error {
-	log.Info().Str("blockchain", "tezos").Msg("restoring...")
+	defer func() {
+		wt.restoring = false
+	}()
+	wt.restoring = true
+
 	if err := wt.tezos.Restore(); err != nil {
 		return err
 	}
-	log.Info().Str("blockchain", "tezos").Msg("restored")
 
-	log.Info().Str("blockchain", "ethereum").Msg("restoring...")
 	if err := wt.ethereum.Restore(); err != nil {
 		return err
 	}
-	log.Info().Str("blockchain", "ethereum").Msg("restored")
+
+	time.Sleep(time.Second * 30)
+
 	return nil
 }
 
@@ -106,12 +111,10 @@ func (wt *WatchTower) Close() error {
 	wt.stopped = true
 	wt.wg.Wait()
 
-	log.Info().Str("blockchain", "tezos").Msg("closing...")
 	if err := wt.tezos.Close(); err != nil {
 		return err
 	}
 
-	log.Info().Str("blockchain", "ethereum").Msg("closing...")
 	if err := wt.ethereum.Close(); err != nil {
 		return err
 	}
@@ -169,10 +172,7 @@ func (wt *WatchTower) listen() {
 
 		// Manager channels
 		case <-ticker.C:
-			if err := wt.checkRefundTime(); err != nil {
-				log.Err(err).Msg("checkRefundTime")
-				continue
-			}
+			wt.checkRefundTime()
 		}
 	}
 }
@@ -181,18 +181,23 @@ func (wt *WatchTower) onInit(event chain.InitEvent) error {
 	swap := wt.getSwap(event.Event)
 	swap.FromInitEvent(event)
 
+	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) onRedeem(event chain.RedeemEvent) error {
 	swap := wt.getSwap(event.Event)
 	swap.FromRedeemEvent(event)
+
+	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) onRefund(event chain.RefundEvent) error {
 	swap := wt.getSwap(event.Event)
 	swap.FromRefundEvent(event)
+
+	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 	return wt.processSwap(swap)
 }
 
@@ -206,13 +211,11 @@ func (wt *WatchTower) getSwap(event chain.Event) *Swap {
 }
 
 func (wt *WatchTower) processSwap(swap *Swap) error {
-	if swap.RetryCount > wt.retryCount {
+	if swap.RetryCount >= wt.retryCount {
 		delete(wt.swaps, swap.HashedSecret)
 		log.Info().Str("hashed_secret", swap.HashedSecret.String()).Msg("swap retry count transaction exceeded")
 		return nil
 	}
-
-	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("status", swap.Status.String()).Msg("swap's state change")
 
 	switch swap.Status {
 	case StatusRedeemedOnce:
@@ -229,50 +232,69 @@ func (wt *WatchTower) processSwap(swap *Swap) error {
 	return nil
 }
 
-func (wt *WatchTower) checkRefundTime() error {
-	if !wt.needRefund {
-		return nil
+func (wt *WatchTower) checkRefundTime() {
+	if !wt.needRefund || wt.restoring {
+		return
 	}
 
 	for hashedSecret, swap := range wt.swaps {
 		if wt.stopped {
-			return nil
+			return
 		}
 		if swap.RefundTime.UTC().Before(time.Now().UTC()) {
 			if err := wt.refund(swap); err != nil {
-				return err
+				log.Err(err).Msg("checkRefundTime")
+				continue
 			}
 			delete(wt.swaps, hashedSecret)
 			time.Sleep(time.Second)
-
 		}
 	}
-	return nil
 }
 
 func (wt *WatchTower) redeem(swap *Swap) error {
+	if swap.Acceptor.ChainType == chain.ChainTypeUnknown {
+		swap.RetryCount = wt.retryCount
+		delete(wt.swaps, swap.HashedSecret)
+		return nil
+	}
+
+	if wt.restoring {
+		return nil
+	}
+
 	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("blockchain", swap.Initiator.ChainType.String()).Msg("redeem")
 
 	swap.RetryCount++
 	switch swap.Initiator.ChainType {
-	case chain.ChainTypeEthereum:
-		return wt.ethereum.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
-	case chain.ChainTypeTezos:
-		return wt.tezos.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
+	// case chain.ChainTypeEthereum:
+	// 	return wt.ethereum.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
+	// case chain.ChainTypeTezos:
+	// 	return wt.tezos.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
 	default:
 		return errors.Errorf("unknown chain type: %v", swap.Initiator.ChainType)
 	}
 }
 
 func (wt *WatchTower) refund(swap *Swap) error {
+	if swap.Acceptor.ChainType == chain.ChainTypeUnknown {
+		swap.RetryCount = wt.retryCount
+		delete(wt.swaps, swap.HashedSecret)
+		return nil
+	}
+
+	if wt.restoring {
+		return nil
+	}
+
 	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("blockchain", swap.Initiator.ChainType.String()).Msg("refund")
 
 	swap.RetryCount++
 	switch swap.Initiator.ChainType {
-	case chain.ChainTypeEthereum:
-		return wt.ethereum.Refund(swap.HashedSecret, swap.Contract)
-	case chain.ChainTypeTezos:
-		return wt.tezos.Refund(swap.HashedSecret, swap.Contract)
+	// case chain.ChainTypeEthereum:
+	// 	return wt.ethereum.Refund(swap.HashedSecret, swap.Contract)
+	// case chain.ChainTypeTezos:
+	// 	return wt.tezos.Refund(swap.HashedSecret, swap.Contract)
 	default:
 		return errors.Errorf("unknown chain type: %v", swap.Initiator.ChainType)
 	}

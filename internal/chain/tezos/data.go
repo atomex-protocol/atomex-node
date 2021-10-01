@@ -29,13 +29,26 @@ const (
 	BigMapActionUpdateKey BigMapAction = "update_key"
 )
 
-// AtomexValue -
-type AtomexValue struct {
+// NewAtomexValue -
+type NewAtomexValue struct {
 	Amount      string `json:"amount" mapstructure:"amount"`
 	Payoff      string `json:"payoff" mapstructure:"payoff"`
 	RefundTime  string `json:"refund_time" mapstructure:"refund_time"`
 	Initiator   string `json:"initiator" mapstructure:"initiator"`
 	Participant string `json:"participant" mapstructure:"participant"`
+}
+
+// AtomexValue -
+type AtomexValue struct {
+	Settings struct {
+		Amount     string `json:"amount" mapstructure:"amount"`
+		Payoff     string `json:"payoff" mapstructure:"payoff"`
+		RefundTime string `json:"refund_time" mapstructure:"refund_time"`
+	} `json:"settings" mapstructure:"settings"`
+	Recipients struct {
+		Initiator   string `json:"initiator" mapstructure:"initiator"`
+		Participant string `json:"participant" mapstructure:"participant"`
+	} `json:"recipients" mapstructure:"recipients"`
 }
 
 // AtomexTokenValue -

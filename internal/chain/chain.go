@@ -83,7 +83,8 @@ type ChainType int
 
 // chain types
 const (
-	ChainTypeTezos ChainType = iota + 1
+	ChainTypeUnknown ChainType = iota
+	ChainTypeTezos
 	ChainTypeEthereum
 )
 
