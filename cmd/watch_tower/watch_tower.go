@@ -267,10 +267,10 @@ func (wt *WatchTower) redeem(swap *Swap) error {
 
 	swap.RetryCount++
 	switch swap.Initiator.ChainType {
-	// case chain.ChainTypeEthereum:
-	// 	return wt.ethereum.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
-	// case chain.ChainTypeTezos:
-	// 	return wt.tezos.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
+	case chain.ChainTypeEthereum:
+		return wt.ethereum.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
+	case chain.ChainTypeTezos:
+		return wt.tezos.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
 	default:
 		return errors.Errorf("unknown chain type: %v", swap.Initiator.ChainType)
 	}
@@ -291,10 +291,10 @@ func (wt *WatchTower) refund(swap *Swap) error {
 
 	swap.RetryCount++
 	switch swap.Initiator.ChainType {
-	// case chain.ChainTypeEthereum:
-	// 	return wt.ethereum.Refund(swap.HashedSecret, swap.Contract)
-	// case chain.ChainTypeTezos:
-	// 	return wt.tezos.Refund(swap.HashedSecret, swap.Contract)
+	case chain.ChainTypeEthereum:
+		return wt.ethereum.Refund(swap.HashedSecret, swap.Contract)
+	case chain.ChainTypeTezos:
+		return wt.tezos.Refund(swap.HashedSecret, swap.Contract)
 	default:
 		return errors.Errorf("unknown chain type: %v", swap.Initiator.ChainType)
 	}
