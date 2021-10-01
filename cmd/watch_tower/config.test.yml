@@ -13,7 +13,7 @@ ethereum:
   erc20_address: 0x189737A901f57Fc52640F9B96E61019981C6c1eb
   user_address: 0x5660A5b91E41033304cB98c8e4895dCd086EC08b
   min_payoff: "0"
-restore: true
+restore: false
 types:
   - redeem
   - refund
