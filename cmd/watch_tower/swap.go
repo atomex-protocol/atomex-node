@@ -11,7 +11,6 @@ import (
 type Swap struct {
 	HashedSecret chain.Hex
 	Secret       chain.Hex
-	Contract     string
 	Status       Status
 	RefundTime   time.Time
 	Initiator    Leg
@@ -22,8 +21,7 @@ type Swap struct {
 // NewSwap -
 func NewSwap(event chain.Event) *Swap {
 	return &Swap{
-		HashedSecret: event.HashedSecret,
-		Contract:     event.Contract,
+		HashedSecret: event.HashedSecret(),
 		Status:       StatusEmpty,
 	}
 }
@@ -39,7 +37,7 @@ func (swap *Swap) log() {
 
 // FromInitEvent -
 func (swap *Swap) FromInitEvent(event chain.InitEvent) {
-	if swap.HashedSecret != event.HashedSecret {
+	if swap.HashedSecret != event.HashedSecret() {
 		return
 	}
 
@@ -50,20 +48,25 @@ func (swap *Swap) FromInitEvent(event chain.InitEvent) {
 		swap.Initiator = Leg{
 			ChainType: event.Chain,
 			Address:   event.Initiator,
+			Contract:  event.ContractAddress,
+			Status:    StatusInitiated,
 		}
 		swap.Acceptor = Leg{
-			Address: event.Initiator,
+			Address: event.Participant,
+			Status:  StatusEmpty,
 		}
 		swap.Status = StatusInitiatedOnce
 	case StatusInitiatedOnce:
 		swap.Acceptor.ChainType = event.Chain
+		swap.Acceptor.Contract = event.ContractAddress
+		swap.Acceptor.Status = StatusInitiated
 		swap.Status = StatusInitiated
 	}
 }
 
 // FromRedeemEvent -
 func (swap *Swap) FromRedeemEvent(event chain.RedeemEvent) {
-	if swap.HashedSecret != event.HashedSecret {
+	if swap.HashedSecret != event.HashedSecret() {
 		return
 	}
 	if swap.Secret == "" {
@@ -76,11 +79,18 @@ func (swap *Swap) FromRedeemEvent(event chain.RedeemEvent) {
 	case StatusRedeemedOnce:
 		swap.Status = StatusRedeemed
 	}
+
+	if swap.Acceptor.Contract == event.ContractAddress && swap.Acceptor.ChainType == event.Chain {
+		swap.Acceptor.Status = StatusRedeemed
+	}
+	if swap.Initiator.Contract == event.ContractAddress && swap.Initiator.ChainType == event.Chain {
+		swap.Initiator.Status = StatusRedeemed
+	}
 }
 
 // FromRefundEvent -
 func (swap *Swap) FromRefundEvent(event chain.RefundEvent) {
-	if swap.HashedSecret != event.HashedSecret {
+	if swap.HashedSecret != event.HashedSecret() {
 		return
 	}
 	switch swap.Status {
@@ -89,12 +99,45 @@ func (swap *Swap) FromRefundEvent(event chain.RefundEvent) {
 	case StatusRefundedOnce:
 		swap.Status = StatusRefunded
 	}
+
+	if swap.Acceptor.Contract == event.ContractAddress && swap.Acceptor.ChainType == event.Chain {
+		swap.Acceptor.Status = StatusRefunded
+	}
+	if swap.Initiator.Contract == event.ContractAddress && swap.Initiator.ChainType == event.Chain {
+		swap.Initiator.Status = StatusRefunded
+	}
+}
+
+// Leg -
+func (swap *Swap) Leg() *Leg {
+	if swap.Acceptor.ChainType == chain.ChainTypeUnknown || swap.Initiator.ChainType == chain.ChainTypeUnknown {
+		return nil
+	}
+
+	if swap.Acceptor.IsFinished() && swap.Initiator.IsFinished() {
+		return nil
+	}
+
+	switch {
+	case swap.Acceptor.Status > swap.Initiator.Status:
+		return &swap.Initiator
+	case swap.Acceptor.Status < swap.Initiator.Status:
+		return &swap.Acceptor
+	}
+	return nil
 }
 
 // Leg -
 type Leg struct {
 	ChainType chain.ChainType
 	Address   string
+	Contract  string
+	Status    Status
+}
+
+// IsFinished -
+func (leg Leg) IsFinished() bool {
+	return leg.Status == StatusRedeemed || leg.Status == StatusRefunded
 }
 
 // Status -

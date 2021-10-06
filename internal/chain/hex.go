@@ -21,12 +21,15 @@ func NewHexFromBytes32(data [32]byte) Hex {
 
 // Bytes -
 func (h Hex) Bytes() ([]byte, error) {
-	return hex.DecodeString(string(h))
+	if data, err := hex.DecodeString(string(h)); err == nil {
+		return data, nil
+	}
+	return []byte(h), nil
 }
 
 // Bytes32 -
 func (h Hex) Bytes32() ([32]byte, error) {
-	if len(h) != 64 {
+	if len(h) > 64 {
 		return [32]byte{}, errors.Errorf("invalid hex length %d for string %s", len(h), h)
 	}
 	data, err := h.Bytes()

@@ -16,43 +16,112 @@ var (
 // Chain -
 type Chain interface {
 	io.Closer
+	Init() error
 	Run() error
 	Redeem(hashedSecret, secret Hex, contract string) error
 	Refund(hashedSecret Hex, contract string) error
 	Restore() error
 
-	InitEvents() <-chan InitEvent
-	RedeemEvents() <-chan RedeemEvent
-	RefundEvents() <-chan RefundEvent
+	Events() <-chan Event
 	Operations() <-chan Operation
+}
+
+// Event -
+type Event interface {
+	Level() uint64
+	HashedSecret() Hex
+	ChainType() ChainType
+	Contract() string
 }
 
 // RedeemEvent -
 type RedeemEvent struct {
-	Event
-	Secret Hex
+	HashedSecretHex Hex
+	ContractAddress string
+	Chain           ChainType
+	BlockNumber     uint64
+	Secret          Hex
+}
+
+// Level -
+func (e RedeemEvent) Level() uint64 {
+	return e.BlockNumber
+}
+
+// Contract -
+func (e RedeemEvent) Contract() string {
+	return e.ContractAddress
+}
+
+// ChainType -
+func (e RedeemEvent) ChainType() ChainType {
+	return e.Chain
+}
+
+// HashedSecret -
+func (e RedeemEvent) HashedSecret() Hex {
+	return e.HashedSecretHex
 }
 
 // RefundEvent -
 type RefundEvent struct {
-	Event
+	HashedSecretHex Hex
+	ContractAddress string
+	Chain           ChainType
+	BlockNumber     uint64
+}
+
+// Level -
+func (e RefundEvent) Level() uint64 {
+	return e.BlockNumber
+}
+
+// Contract -
+func (e RefundEvent) Contract() string {
+	return e.ContractAddress
+}
+
+// ChainType -
+func (e RefundEvent) ChainType() ChainType {
+	return e.Chain
+}
+
+// HashedSecret -
+func (e RefundEvent) HashedSecret() Hex {
+	return e.HashedSecretHex
 }
 
 // InitEvent -
 type InitEvent struct {
-	Event
-	Initiator   string
-	Participant string
-	Amount      decimal.Decimal
-	PayOff      decimal.Decimal
-	RefundTime  time.Time
+	HashedSecretHex Hex
+	ContractAddress string
+	Chain           ChainType
+	BlockNumber     uint64
+	Initiator       string
+	Participant     string
+	Amount          decimal.Decimal
+	PayOff          decimal.Decimal
+	RefundTime      time.Time
 }
 
-// Event -
-type Event struct {
-	HashedSecret Hex
-	Contract     string
-	Chain        ChainType
+// Level -
+func (e InitEvent) Level() uint64 {
+	return e.BlockNumber
+}
+
+// Contract -
+func (e InitEvent) Contract() string {
+	return e.ContractAddress
+}
+
+// ChainType -
+func (e InitEvent) ChainType() ChainType {
+	return e.Chain
+}
+
+// HashedSecret -
+func (e InitEvent) HashedSecret() Hex {
+	return e.HashedSecretHex
 }
 
 // SetAmountFromString -
@@ -78,6 +147,31 @@ func (event *InitEvent) SetPayOff(payoff string, minPayoff decimal.Decimal) erro
 	return nil
 }
 
+// RestoredEvent -
+type RestoredEvent struct {
+	Chain ChainType
+}
+
+// Level -
+func (e RestoredEvent) Level() uint64 {
+	return 0
+}
+
+// Contract -
+func (e RestoredEvent) Contract() string {
+	return ""
+}
+
+// ChainType -
+func (e RestoredEvent) ChainType() ChainType {
+	return e.Chain
+}
+
+// HashedSecret -
+func (e RestoredEvent) HashedSecret() Hex {
+	return ""
+}
+
 // ChainType -
 type ChainType int
 
@@ -99,3 +193,15 @@ func (c ChainType) String() string {
 		return "unknown"
 	}
 }
+
+// ByLevel -
+type ByLevel []Event
+
+// Len -
+func (a ByLevel) Len() int { return len(a) }
+
+// Less -
+func (a ByLevel) Less(i, j int) bool { return a[i].Level() < a[j].Level() }
+
+// Swap -
+func (a ByLevel) Swap(i, j int) { a[i], a[j] = a[j], a[i] }

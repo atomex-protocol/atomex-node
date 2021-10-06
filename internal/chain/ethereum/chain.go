@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"math/big"
+	"sort"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -40,9 +42,7 @@ type Ethereum struct {
 
 	logs       chan types.Log
 	head       chan *types.Header
-	initChan   chan chain.InitEvent
-	redeemChan chan chain.RedeemEvent
-	refundChan chan chain.RefundEvent
+	events     chan chain.Event
 	operations chan chain.Operation
 	stop       chan struct{}
 	wg         sync.WaitGroup
@@ -88,9 +88,7 @@ func New(cfg config.Ethereum) (*Ethereum, error) {
 		wss:        wss,
 		logs:       make(chan types.Log, 1024),
 		head:       make(chan *types.Header, 16),
-		initChan:   make(chan chain.InitEvent, 1024),
-		redeemChan: make(chan chain.RedeemEvent, 1024),
-		refundChan: make(chan chain.RefundEvent, 1024),
+		events:     make(chan chain.Event, 1024),
 		operations: make(chan chain.Operation, 1024),
 		stop:       make(chan struct{}, 1),
 	}
@@ -130,18 +128,32 @@ func (e *Ethereum) err() *zerolog.Event {
 	return log.Error().Str("blockchain", chain.ChainTypeEthereum.String())
 }
 
+// Init -
+func (e *Ethereum) Init() error {
+	e.info().Msg("initializing...")
+	return LoadAbi()
+}
+
 // Run -
 func (e *Ethereum) Run() error {
-	if err := LoadAbi(); err != nil {
-		return err
-	}
-
+	e.info().Msg("running...")
 	latest, err := e.client.BlockNumber(context.Background())
 	if err != nil {
 		return err
 	}
 	e.latest = int64(latest)
 
+	if err := e.subscribe(); err != nil {
+		return errors.Wrap(err, "subscribe")
+	}
+
+	e.wg.Add(1)
+	go e.listen()
+
+	return nil
+}
+
+func (e *Ethereum) subscribe() error {
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{
 			common.HexToAddress(e.cfg.EthAddress),
@@ -161,10 +173,18 @@ func (e *Ethereum) Run() error {
 		return err
 	}
 	e.subHead = subHead
+	return nil
+}
 
-	e.wg.Add(1)
-	go e.listen()
-
+func (e *Ethereum) reconnect() error {
+	wss, err := ethclient.Dial(e.cfg.Wss)
+	if err != nil {
+		return errors.Wrap(err, "reconnect Dial")
+	}
+	e.wss = wss
+	if err := e.subscribe(); err != nil {
+		return errors.Wrap(err, "reconnect subscribe")
+	}
 	return nil
 }
 
@@ -181,27 +201,15 @@ func (e *Ethereum) Close() error {
 
 	close(e.logs)
 	close(e.head)
-	close(e.initChan)
-	close(e.redeemChan)
-	close(e.refundChan)
+	close(e.events)
 	close(e.operations)
 	close(e.stop)
 	return nil
 }
 
 // InitEvents -
-func (e *Ethereum) InitEvents() <-chan chain.InitEvent {
-	return e.initChan
-}
-
-// RedeemEvents -
-func (e *Ethereum) RedeemEvents() <-chan chain.RedeemEvent {
-	return e.redeemChan
-}
-
-// RefundEvents -
-func (e *Ethereum) RefundEvents() <-chan chain.RefundEvent {
-	return e.refundChan
+func (e *Ethereum) Events() <-chan chain.Event {
+	return e.events
 }
 
 // Operations -
@@ -211,6 +219,8 @@ func (e *Ethereum) Operations() <-chan chain.Operation {
 
 // Redeem -
 func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error {
+	e.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
+
 	opts, err := e.buildTxOpts()
 	if err != nil {
 		return err
@@ -251,6 +261,8 @@ func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error
 
 // Refund -
 func (e *Ethereum) Refund(hashedSecret chain.Hex, contract string) error {
+	e.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
+
 	opts, err := e.buildTxOpts()
 	if err != nil {
 		return err
@@ -311,144 +323,141 @@ func (e *Ethereum) buildTxOpts() (*bind.TransactOpts, error) {
 // Restore -
 func (e *Ethereum) Restore() error {
 	e.info().Msg("restoring...")
-	if err := e.restoreEth(); err != nil {
-		return err
-	}
-	if err := e.restoreErc20(); err != nil {
-		return err
-	}
-	e.info().Msg("restored")
-	return nil
-}
-
-func (e *Ethereum) restoreEth() error {
-	iterInit, err := e.eth.FilterInitiated(nil, nil, nil)
+	ethEvents, err := e.restoreEth()
 	if err != nil {
 		return err
 	}
+	erc20Events, err := e.restoreErc20()
+	if err != nil {
+		return err
+	}
+	events := append(ethEvents, erc20Events...)
+	sort.Sort(chain.ByLevel(events))
+
+	for i := range events {
+		e.events <- events[i]
+	}
+	e.events <- chain.RestoredEvent{Chain: chain.ChainTypeEthereum}
+	return nil
+}
+
+func (e *Ethereum) restoreEth() ([]chain.Event, error) {
+	events := make([]chain.Event, 0)
+	iterInit, err := e.eth.FilterInitiated(nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 	for iterInit.Next() {
-		hashedSecret := chain.NewHexFromBytes32(iterInit.Event.HashedSecret)
-
-		if e.minPayoff.Cmp(iterInit.Event.Payoff) > 0 {
-			continue
-		}
-
-		e.initChan <- chain.InitEvent{
-			Event: chain.Event{
-				HashedSecret: hashedSecret,
-				Contract:     e.cfg.EthAddress,
-				Chain:        chain.ChainTypeEthereum,
-			},
-			Participant: iterInit.Event.Participant.Hex(),
-			Initiator:   iterInit.Event.Initiator.Hex(),
-			Amount:      decimal.NewFromBigInt(iterInit.Event.Value, 0),
-			PayOff:      decimal.NewFromBigInt(iterInit.Event.Payoff, 0),
-			RefundTime:  time.Unix(iterInit.Event.RefundTimestamp.Int64(), 0),
-		}
+		events = append(events, chain.InitEvent{
+			HashedSecretHex: chain.NewHexFromBytes32(iterInit.Event.HashedSecret),
+			ContractAddress: e.cfg.EthAddress,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     iterInit.Event.Raw.BlockNumber,
+			Participant:     iterInit.Event.Participant.Hex(),
+			Initiator:       iterInit.Event.Initiator.Hex(),
+			Amount:          decimal.NewFromBigInt(iterInit.Event.Value, 0),
+			PayOff:          decimal.NewFromBigInt(iterInit.Event.Payoff, 0),
+			RefundTime:      time.Unix(iterInit.Event.RefundTimestamp.Int64(), 0),
+		})
 	}
 	if err := iterInit.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
 	iterRedeemed, err := e.eth.FilterRedeemed(nil, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for iterRedeemed.Next() {
-		e.redeemChan <- chain.RedeemEvent{
-			Event: chain.Event{
-				HashedSecret: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
-				Contract:     e.cfg.EthAddress,
-				Chain:        chain.ChainTypeEthereum,
-			},
-			Secret: chain.Hex(iterRedeemed.event),
-		}
+		events = append(events, chain.RedeemEvent{
+			HashedSecretHex: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
+			ContractAddress: e.cfg.EthAddress,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     iterRedeemed.Event.Raw.BlockNumber,
+			Secret:          chain.NewHexFromBytes32(iterRedeemed.Event.Secret),
+		})
 	}
 	if err := iterRedeemed.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
 	iterRefunded, err := e.eth.FilterRefunded(nil, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for iterRefunded.Next() {
-		hashedSecret := chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret)
-		e.refundChan <- chain.RefundEvent{
-			Event: chain.Event{
-				HashedSecret: hashedSecret,
-				Contract:     e.cfg.EthAddress,
-				Chain:        chain.ChainTypeEthereum,
-			},
-		}
+		events = append(events, chain.RefundEvent{
+			HashedSecretHex: chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret),
+			ContractAddress: e.cfg.EthAddress,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     iterRefunded.Event.Raw.BlockNumber,
+		})
 	}
 	if err := iterRefunded.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return events, nil
 }
 
-func (e *Ethereum) restoreErc20() error {
+func (e *Ethereum) restoreErc20() ([]chain.Event, error) {
+	events := make([]chain.Event, 0)
+
 	iterInit, err := e.erc20.FilterInitiated(nil, nil, nil, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for iterInit.Next() {
-		e.initChan <- chain.InitEvent{
-			Event: chain.Event{
-				HashedSecret: chain.NewHexFromBytes32(iterInit.Event.HashedSecret),
-				Contract:     e.cfg.Erc20Address,
-				Chain:        chain.ChainTypeEthereum,
-			},
-			Participant: iterInit.Event.Participant.Hex(),
-			Initiator:   iterInit.Event.Initiator.Hex(),
-			Amount:      decimal.NewFromBigInt(iterInit.Event.Value, 0),
-			PayOff:      decimal.NewFromBigInt(iterInit.Event.Payoff, 0),
-			RefundTime:  time.Unix(iterInit.Event.RefundTimestamp.Int64(), 0),
-		}
+		events = append(events, chain.InitEvent{
+			HashedSecretHex: chain.NewHexFromBytes32(iterInit.Event.HashedSecret),
+			ContractAddress: e.cfg.Erc20Address,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     iterInit.Event.Raw.BlockNumber,
+			Participant:     iterInit.Event.Participant.Hex(),
+			Initiator:       iterInit.Event.Initiator.Hex(),
+			Amount:          decimal.NewFromBigInt(iterInit.Event.Value, 0),
+			PayOff:          decimal.NewFromBigInt(iterInit.Event.Payoff, 0),
+			RefundTime:      time.Unix(iterInit.Event.RefundTimestamp.Int64(), 0),
+		})
 	}
 	if err := iterInit.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
 	iterRedeemed, err := e.erc20.FilterRedeemed(nil, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for iterRedeemed.Next() {
-		e.redeemChan <- chain.RedeemEvent{
-			Event: chain.Event{
-				HashedSecret: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
-				Contract:     e.cfg.Erc20Address,
-				Chain:        chain.ChainTypeEthereum,
-			},
-			Secret: chain.Hex(iterRedeemed.event),
-		}
+		events = append(events, chain.RedeemEvent{
+			HashedSecretHex: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
+			ContractAddress: e.cfg.Erc20Address,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     iterRedeemed.Event.Raw.BlockNumber,
+			Secret:          chain.NewHexFromBytes32(iterRedeemed.Event.Secret),
+		})
 	}
 	if err := iterRedeemed.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
 	iterRefunded, err := e.erc20.FilterRefunded(nil, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for iterRefunded.Next() {
-		hashedSecret := chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret)
-		e.refundChan <- chain.RefundEvent{
-			Event: chain.Event{
-				HashedSecret: hashedSecret,
-				Contract:     e.cfg.Erc20Address,
-				Chain:        chain.ChainTypeEthereum,
-			},
-		}
+		events = append(events, chain.RefundEvent{
+			HashedSecretHex: chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret),
+			ContractAddress: e.cfg.Erc20Address,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     iterRefunded.Event.Raw.BlockNumber,
+		})
 	}
 	if err := iterRefunded.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return events, nil
 }
 
 func (e *Ethereum) parseLog(l types.Log) error {
@@ -504,8 +513,18 @@ func (e *Ethereum) listen() {
 			}
 		case err := <-e.subLogs.Err():
 			e.err().Err(err).Msg("ethereum subscription error")
+			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
+				if err := e.reconnect(); err != nil {
+					e.err().Err(err).Msg("")
+				}
+			}
 		case err := <-e.subHead.Err():
 			e.err().Err(err).Msg("ethereum subscription error")
+			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
+				if err := e.reconnect(); err != nil {
+					e.err().Err(err).Msg("")
+				}
+			}
 		}
 	}
 }
@@ -526,17 +545,16 @@ func (e *Ethereum) handleInitiated(abi *abi.ABI, l types.Log, event *abi.Event, 
 			return nil
 		}
 
-		e.initChan <- chain.InitEvent{
-			Event: chain.Event{
-				HashedSecret: hashedSecret,
-				Contract:     e.cfg.EthAddress,
-				Chain:        chain.ChainTypeEthereum,
-			},
-			Participant: common.BytesToAddress(l.Topics[2].Bytes()).Hex(),
-			Initiator:   args.Initiator.Hex(),
-			Amount:      decimal.NewFromBigInt(args.Value, 0),
-			PayOff:      decimal.NewFromBigInt(args.PayOff, 0),
-			RefundTime:  time.Unix(args.RefundTimestamp.Int64(), 0),
+		e.events <- chain.InitEvent{
+			HashedSecretHex: hashedSecret,
+			ContractAddress: e.cfg.EthAddress,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     l.BlockNumber,
+			Participant:     common.BytesToAddress(l.Topics[2].Bytes()).Hex(),
+			Initiator:       args.Initiator.Hex(),
+			Amount:          decimal.NewFromBigInt(args.Value, 0),
+			PayOff:          decimal.NewFromBigInt(args.PayOff, 0),
+			RefundTime:      time.Unix(args.RefundTimestamp.Int64(), 0),
 		}
 	case ContractTypeErc20:
 		if len(l.Topics) != 4 {
@@ -553,29 +571,27 @@ func (e *Ethereum) handleInitiated(abi *abi.ABI, l types.Log, event *abi.Event, 
 			return nil
 		}
 
-		e.initChan <- chain.InitEvent{
-			Event: chain.Event{
-				HashedSecret: chain.Hex(l.Topics[1].Hex()[2:]),
-				Contract:     e.cfg.Erc20Address,
-				Chain:        chain.ChainTypeEthereum,
-			},
-			Participant: l.Topics[3].Hex(),
-			Initiator:   args.Initiator.Hex(),
-			Amount:      decimal.NewFromBigInt(args.Value, 0),
-			PayOff:      decimal.NewFromBigInt(args.PayOff, 0),
-			RefundTime:  time.Unix(args.RefundTimestamp.Int64(), 0),
+		e.events <- chain.InitEvent{
+			HashedSecretHex: chain.Hex(l.Topics[1].Hex()[2:]),
+			ContractAddress: e.cfg.Erc20Address,
+			Chain:           chain.ChainTypeEthereum,
+			BlockNumber:     l.BlockNumber,
+			Participant:     l.Topics[3].Hex(),
+			Initiator:       args.Initiator.Hex(),
+			Amount:          decimal.NewFromBigInt(args.Value, 0),
+			PayOff:          decimal.NewFromBigInt(args.PayOff, 0),
+			RefundTime:      time.Unix(args.RefundTimestamp.Int64(), 0),
 		}
 	}
 	return nil
 }
 
 func (e *Ethereum) handleRefunded(l types.Log) error {
-	e.refundChan <- chain.RefundEvent{
-		Event: chain.Event{
-			HashedSecret: chain.Hex(l.Topics[1].Hex()[2:]),
-			Chain:        chain.ChainTypeEthereum,
-			Contract:     l.Address.Hex(),
-		},
+	e.events <- chain.RefundEvent{
+		HashedSecretHex: chain.Hex(l.Topics[1].Hex()[2:]),
+		Chain:           chain.ChainTypeEthereum,
+		ContractAddress: l.Address.Hex(),
+		BlockNumber:     l.BlockNumber,
 	}
 	return nil
 }
@@ -586,13 +602,12 @@ func (e *Ethereum) handleRedeemed(abi *abi.ABI, l types.Log, event *abi.Event) e
 		return err
 	}
 
-	e.redeemChan <- chain.RedeemEvent{
-		Event: chain.Event{
-			HashedSecret: chain.Hex(l.Topics[1].Hex()[2:]),
-			Chain:        chain.ChainTypeEthereum,
-			Contract:     l.Address.Hex(),
-		},
-		Secret: chain.NewHexFromBytes32(args.Secret),
+	e.events <- chain.RedeemEvent{
+		HashedSecretHex: chain.Hex(l.Topics[1].Hex()[2:]),
+		Chain:           chain.ChainTypeEthereum,
+		ContractAddress: l.Address.Hex(),
+		BlockNumber:     l.BlockNumber,
+		Secret:          chain.NewHexFromBytes32(args.Secret),
 	}
 	return nil
 }

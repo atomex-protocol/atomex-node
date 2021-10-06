@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
@@ -10,6 +11,10 @@ import (
 	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	chainsCount = 2
 )
 
 // WatchTower -
@@ -24,10 +29,10 @@ type WatchTower struct {
 	needRefund bool
 	retryCount uint
 
-	restoring bool
-	stopped   bool
-	stop      chan struct{}
-	wg        sync.WaitGroup
+	restoreCounter int32
+	stopped        bool
+	stop           chan struct{}
+	wg             sync.WaitGroup
 }
 
 // NewWatchTower -
@@ -64,13 +69,11 @@ func NewWatchTower(cfg config.Config) (*WatchTower, error) {
 
 // Run -
 func (wt *WatchTower) Run(restore bool) error {
-	log.Info().Str("blockchain", "tezos").Msg("running...")
-	if err := wt.tezos.Run(); err != nil {
+	if err := wt.tezos.Init(); err != nil {
 		return err
 	}
 
-	log.Info().Str("blockchain", "ethereum").Msg("running...")
-	if err := wt.ethereum.Run(); err != nil {
+	if err := wt.ethereum.Init(); err != nil {
 		return err
 	}
 
@@ -81,17 +84,22 @@ func (wt *WatchTower) Run(restore bool) error {
 		if err := wt.restore(); err != nil {
 			return err
 		}
+	} else {
+		wt.restoreCounter = chainsCount
+	}
+
+	if err := wt.tezos.Run(); err != nil {
+		return err
+	}
+
+	if err := wt.ethereum.Run(); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 func (wt *WatchTower) restore() error {
-	defer func() {
-		wt.restoring = false
-	}()
-	wt.restoring = true
-
 	if err := wt.tezos.Restore(); err != nil {
 		return err
 	}
@@ -99,8 +107,6 @@ func (wt *WatchTower) restore() error {
 	if err := wt.ethereum.Restore(); err != nil {
 		return err
 	}
-
-	time.Sleep(time.Second * 30)
 
 	return nil
 }
@@ -126,7 +132,7 @@ func (wt *WatchTower) Close() error {
 func (wt *WatchTower) listen() {
 	defer wt.wg.Done()
 
-	ticker := time.NewTicker(time.Second * 15)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -135,17 +141,9 @@ func (wt *WatchTower) listen() {
 			return
 
 		// Tezos
-		case event := <-wt.tezos.InitEvents():
-			if err := wt.onInit(event); err != nil {
-				log.Err(err).Msg("onInit")
-			}
-		case event := <-wt.tezos.RedeemEvents():
-			if err := wt.onRedeem(event); err != nil {
-				log.Err(err).Msg("onRedeem")
-			}
-		case event := <-wt.tezos.RefundEvents():
-			if err := wt.onRefund(event); err != nil {
-				log.Err(err).Msg("onRefund")
+		case event := <-wt.tezos.Events():
+			if err := wt.onEvent(event); err != nil {
+				log.Err(err).Msg("onEvent")
 			}
 		case operation := <-wt.tezos.Operations():
 			if err := wt.processOperation(operation); err != nil {
@@ -153,17 +151,9 @@ func (wt *WatchTower) listen() {
 			}
 
 		// Ethereum
-		case event := <-wt.ethereum.InitEvents():
-			if err := wt.onInit(event); err != nil {
-				log.Err(err).Msg("onInit")
-			}
-		case event := <-wt.ethereum.RedeemEvents():
-			if err := wt.onRedeem(event); err != nil {
-				log.Err(err).Msg("onRedeem")
-			}
-		case event := <-wt.ethereum.RefundEvents():
-			if err := wt.onRefund(event); err != nil {
-				log.Err(err).Msg("onRefund")
+		case event := <-wt.ethereum.Events():
+			if err := wt.onEvent(event); err != nil {
+				log.Err(err).Msg("onEvent")
 			}
 		case operation := <-wt.ethereum.Operations():
 			if err := wt.processOperation(operation); err != nil {
@@ -177,29 +167,58 @@ func (wt *WatchTower) listen() {
 	}
 }
 
+func (wt *WatchTower) onEvent(event chain.Event) error {
+	switch e := event.(type) {
+	case chain.InitEvent:
+		if err := wt.onInit(e); err != nil {
+			return errors.Wrap(err, "onInit")
+		}
+	case chain.RedeemEvent:
+		if err := wt.onRedeem(e); err != nil {
+			return errors.Wrap(err, "onRedeem")
+		}
+	case chain.RefundEvent:
+		if err := wt.onRefund(e); err != nil {
+			return errors.Wrap(err, "onRefund")
+		}
+	case chain.RestoredEvent:
+		atomic.AddInt32(&wt.restoreCounter, 1)
+		log.Info().Str("blockchain", e.Chain.String()).Msg("restored")
+
+		if wt.restoreCounter == chainsCount {
+			for i := range wt.swaps {
+				if err := wt.processSwap(wt.swaps[i]); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (wt *WatchTower) onInit(event chain.InitEvent) error {
-	swap := wt.getSwap(event.Event)
+	swap := wt.getSwap(event)
 	swap.FromInitEvent(event)
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) onRedeem(event chain.RedeemEvent) error {
-	swap := wt.getSwap(event.Event)
+	swap := wt.getSwap(event)
 	swap.FromRedeemEvent(event)
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) onRefund(event chain.RefundEvent) error {
-	swap := wt.getSwap(event.Event)
+	swap := wt.getSwap(event)
 	swap.FromRefundEvent(event)
 	return wt.processSwap(swap)
 }
 
 func (wt *WatchTower) getSwap(event chain.Event) *Swap {
-	s, ok := wt.swaps[event.HashedSecret]
+	s, ok := wt.swaps[event.HashedSecret()]
 	if !ok {
 		s = NewSwap(event)
-		wt.swaps[event.HashedSecret] = s
+		wt.swaps[event.HashedSecret()] = s
 	}
 	return s
 }
@@ -229,7 +248,7 @@ func (wt *WatchTower) processSwap(swap *Swap) error {
 }
 
 func (wt *WatchTower) checkRefundTime() {
-	if !wt.needRefund || wt.restoring {
+	if !wt.needRefund || wt.restoreCounter < chainsCount {
 		return
 	}
 
@@ -239,61 +258,64 @@ func (wt *WatchTower) checkRefundTime() {
 		}
 		if swap.RefundTime.UTC().Before(time.Now().UTC()) {
 			if err := wt.refund(swap); err != nil {
-				log.Err(err).Msg("checkRefundTime")
+				log.Err(err).Msg("refund")
 				continue
 			}
 			delete(wt.swaps, hashedSecret)
-			time.Sleep(time.Second)
 		}
 	}
 }
 
 func (wt *WatchTower) redeem(swap *Swap) error {
-	if swap.Acceptor.ChainType == chain.ChainTypeUnknown {
-		swap.RetryCount = wt.retryCount
-		delete(wt.swaps, swap.HashedSecret)
+	if wt.restoreCounter < chainsCount {
 		return nil
 	}
 
-	if wt.restoring {
-		return nil
+	if leg := swap.Leg(); leg != nil {
+		swap.RetryCount++
+		switch leg.ChainType {
+		case chain.ChainTypeEthereum:
+			if err := wt.ethereum.Redeem(swap.HashedSecret, swap.Secret, leg.Contract); err != nil {
+				return err
+			}
+			time.Sleep(time.Second)
+		case chain.ChainTypeTezos:
+			if err := wt.tezos.Redeem(swap.HashedSecret, swap.Secret, leg.Contract); err != nil {
+				return err
+			}
+			time.Sleep(time.Second)
+		default:
+			return errors.Errorf("unknown chain type: %v", leg.ChainType)
+		}
 	}
 
-	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("blockchain", swap.Initiator.ChainType.String()).Msg("redeem")
-
-	swap.RetryCount++
-	switch swap.Initiator.ChainType {
-	case chain.ChainTypeEthereum:
-		return wt.ethereum.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
-	case chain.ChainTypeTezos:
-		return wt.tezos.Redeem(swap.HashedSecret, swap.Secret, swap.Contract)
-	default:
-		return errors.Errorf("unknown chain type: %v", swap.Initiator.ChainType)
-	}
+	return nil
 }
 
 func (wt *WatchTower) refund(swap *Swap) error {
-	if swap.Acceptor.ChainType == chain.ChainTypeUnknown {
-		swap.RetryCount = wt.retryCount
-		delete(wt.swaps, swap.HashedSecret)
+	if wt.restoreCounter < chainsCount {
 		return nil
 	}
 
-	if wt.restoring {
-		return nil
+	if leg := swap.Leg(); leg != nil {
+		swap.RetryCount++
+		switch leg.ChainType {
+		case chain.ChainTypeEthereum:
+			if err := wt.ethereum.Refund(swap.HashedSecret, leg.Contract); err != nil {
+				return err
+			}
+			time.Sleep(time.Second)
+		case chain.ChainTypeTezos:
+			if err := wt.tezos.Refund(swap.HashedSecret, leg.Contract); err != nil {
+				return err
+			}
+			time.Sleep(time.Second)
+		default:
+			return errors.Errorf("unknown chain type: %v", leg.ChainType)
+		}
 	}
 
-	log.Info().Str("hashed_secret", swap.HashedSecret.String()).Str("blockchain", swap.Initiator.ChainType.String()).Msg("refund")
-
-	swap.RetryCount++
-	switch swap.Initiator.ChainType {
-	case chain.ChainTypeEthereum:
-		return wt.ethereum.Refund(swap.HashedSecret, swap.Contract)
-	case chain.ChainTypeTezos:
-		return wt.tezos.Refund(swap.HashedSecret, swap.Contract)
-	default:
-		return errors.Errorf("unknown chain type: %v", swap.Initiator.ChainType)
-	}
+	return nil
 }
 
 func (wt *WatchTower) processOperation(operation chain.Operation) error {

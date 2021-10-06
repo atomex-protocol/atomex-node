@@ -26,19 +26,17 @@ import (
 
 // Tezos -
 type Tezos struct {
-	cfg       config.Tezos
-	rpc       *rpc.Client
-	api       *api.API
-	events    *events.TzKT
-	key       *keys.Key
-	bigMaps   []api.BigMap
-	counter   int64
-	chainID   string
-	minPayoff decimal.Decimal
+	cfg        config.Tezos
+	rpc        *rpc.Client
+	api        *api.API
+	eventsTzKT *events.TzKT
+	key        *keys.Key
+	bigMaps    []api.BigMap
+	counter    int64
+	chainID    string
+	minPayoff  decimal.Decimal
 
-	initChan   chan chain.InitEvent
-	redeemChan chan chain.RedeemEvent
-	refundChan chan chain.RefundEvent
+	events     chan chain.Event
 	operations chan chain.Operation
 
 	stop chan struct{}
@@ -81,10 +79,8 @@ func New(cfg config.Tezos) (*Tezos, error) {
 		key:        key,
 		api:        api.New(cfg.TzKT),
 		chainID:    block.ChainID,
-		events:     events.NewTzKT(fmt.Sprintf("%s/v1/events", cfg.TzKT)),
-		initChan:   make(chan chain.InitEvent, 1024),
-		redeemChan: make(chan chain.RedeemEvent, 1024),
-		refundChan: make(chan chain.RefundEvent, 1024),
+		eventsTzKT: events.NewTzKT(fmt.Sprintf("%s/v1/events", cfg.TzKT)),
+		events:     make(chan chain.Event, 1024*16),
 		operations: make(chan chain.Operation, 1024),
 		stop:       make(chan struct{}, 1),
 	}, nil
@@ -102,8 +98,9 @@ func (t *Tezos) err() *zerolog.Event {
 	return log.Error().Str("blockchain", chain.ChainTypeTezos.String())
 }
 
-// Run -
-func (t *Tezos) Run() error {
+// Init -
+func (t *Tezos) Init() error {
+	t.info().Msg("initializing...")
 	_, counter, err := t.rpc.ContractCounter(rpc.ContractCounterInput{
 		BlockID:    &rpc.BlockIDHead{},
 		ContractID: t.key.PubKey.GetAddress(),
@@ -120,26 +117,31 @@ func (t *Tezos) Run() error {
 		return err
 	}
 	t.bigMaps = bigMaps
+	return nil
+}
 
-	if err := t.events.Connect(); err != nil {
+// Run -
+func (t *Tezos) Run() error {
+	t.info().Msg("running...")
+	if err := t.eventsTzKT.Connect(); err != nil {
 		return err
 	}
 
 	t.wg.Add(1)
 	go t.listen()
 
-	for _, bm := range bigMaps {
-		if err := t.events.SubscribeToBigMaps(&bm.Ptr, bm.Contract.Address, ""); err != nil {
+	for _, bm := range t.bigMaps {
+		if err := t.eventsTzKT.SubscribeToBigMaps(&bm.Ptr, bm.Contract.Address, ""); err != nil {
 			return err
 		}
 	}
 
-	if err := t.events.SubscribeToOperations(t.cfg.Contract, events.KindTransaction); err != nil {
+	if err := t.eventsTzKT.SubscribeToOperations(t.cfg.Contract, events.KindTransaction); err != nil {
 		return err
 	}
 
 	for i := range t.cfg.Tokens {
-		if err := t.events.SubscribeToOperations(t.cfg.Tokens[i], events.KindTransaction); err != nil {
+		if err := t.eventsTzKT.SubscribeToOperations(t.cfg.Tokens[i], events.KindTransaction); err != nil {
 			return err
 		}
 	}
@@ -153,27 +155,15 @@ func (t *Tezos) Close() error {
 	t.stop <- struct{}{}
 	t.wg.Wait()
 
-	close(t.initChan)
-	close(t.redeemChan)
-	close(t.refundChan)
+	close(t.events)
 	close(t.operations)
 	close(t.stop)
 	return nil
 }
 
-// InitEvents -
-func (t *Tezos) InitEvents() <-chan chain.InitEvent {
-	return t.initChan
-}
-
-// RedeemEvents -
-func (t *Tezos) RedeemEvents() <-chan chain.RedeemEvent {
-	return t.redeemChan
-}
-
-// RefundEvents -
-func (t *Tezos) RefundEvents() <-chan chain.RefundEvent {
-	return t.refundChan
+// Events -
+func (t *Tezos) Events() <-chan chain.Event {
+	return t.events
 }
 
 // Operations -
@@ -188,7 +178,7 @@ func (t *Tezos) listen() {
 		select {
 		case <-t.stop:
 			return
-		case update := <-t.events.Listen():
+		case update := <-t.eventsTzKT.Listen():
 			switch update.Channel {
 			case events.ChannelBigMap:
 				if err := t.handleBigMapChannel(update); err != nil {
@@ -207,7 +197,8 @@ func (t *Tezos) listen() {
 
 // Redeem -
 func (t *Tezos) Redeem(hashedSecret, secret chain.Hex, contract string) error {
-	t.info().Msg("redeeming...")
+	t.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
+
 	value, err := json.Marshal(map[string]interface{}{
 		"bytes": secret,
 	})
@@ -230,7 +221,7 @@ func (t *Tezos) Redeem(hashedSecret, secret chain.Hex, contract string) error {
 
 // Refund -
 func (t *Tezos) Refund(hashedSecret chain.Hex, contract string) error {
-	t.info().Str("hashed_secret", hashedSecret.String()).Msg("refunding...")
+	t.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
 
 	value, err := json.Marshal(map[string]interface{}{
 		"bytes": hashedSecret,
@@ -260,7 +251,8 @@ func (t *Tezos) Restore() error {
 			return err
 		}
 	}
-	t.info().Msg("restored")
+
+	t.events <- chain.RestoredEvent{Chain: chain.ChainTypeTezos}
 	return nil
 }
 
@@ -420,19 +412,18 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 		}
 
 		event := chain.InitEvent{
-			Event: chain.Event{
-				HashedSecret: chain.Hex(bigMapUpdate.Content.Key),
-				Chain:        chain.ChainTypeTezos,
-				Contract:     bigMapUpdate.Contract.Address,
-			},
-			Initiator:   value.Initiator,
-			Participant: value.Participant,
-			RefundTime:  refundTime,
+			HashedSecretHex: chain.Hex(bigMapUpdate.Content.Key),
+			Chain:           chain.ChainTypeTezos,
+			ContractAddress: bigMapUpdate.Contract.Address,
+			BlockNumber:     uint64(bigMapUpdate.Level),
+			Initiator:       value.Initiator,
+			Participant:     value.Participant,
+			RefundTime:      refundTime,
 		}
 
 		if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 			if errors.Is(err, chain.ErrMinPayoff) {
-				t.warn().Str("hashed_secret", event.HashedSecret.String()).Msg("skip because of small pay off")
+				t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 				return nil
 			}
 			return err
@@ -442,7 +433,7 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 			return err
 		}
 
-		t.initChan <- event
+		t.events <- event
 	case BigMapActionUpdateKey:
 	case BigMapActionRemoveKey:
 		ops, err := t.api.GetTransactions(map[string]string{
@@ -469,22 +460,20 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 					secret = chain.Hex(ops[i].Parameters.Value)
 				}
 
-				t.redeemChan <- chain.RedeemEvent{
-					Event: chain.Event{
-						HashedSecret: chain.Hex(bigMapUpdate.Content.Key),
-						Chain:        chain.ChainTypeTezos,
-						Contract:     bigMapUpdate.Contract.Address,
-					},
-					Secret: secret,
+				t.events <- chain.RedeemEvent{
+					HashedSecretHex: chain.Hex(bigMapUpdate.Content.Key),
+					Chain:           chain.ChainTypeTezos,
+					ContractAddress: bigMapUpdate.Contract.Address,
+					BlockNumber:     uint64(bigMapUpdate.Level),
+					Secret:          secret,
 				}
 				return nil
 			case "refund":
-				t.refundChan <- chain.RefundEvent{
-					Event: chain.Event{
-						HashedSecret: chain.Hex(bigMapUpdate.Content.Key),
-						Chain:        chain.ChainTypeTezos,
-						Contract:     bigMapUpdate.Contract.Address,
-					},
+				t.events <- chain.RefundEvent{
+					HashedSecretHex: chain.Hex(bigMapUpdate.Content.Key),
+					Chain:           chain.ChainTypeTezos,
+					ContractAddress: bigMapUpdate.Contract.Address,
+					BlockNumber:     uint64(bigMapUpdate.Level),
 				}
 				return nil
 			}
@@ -507,19 +496,18 @@ func (t *Tezos) parseTokensValueUpdate(bigMapUpdate BigMapUpdate) error {
 			return err
 		}
 		event := chain.InitEvent{
-			Event: chain.Event{
-				HashedSecret: chain.Hex(bigMapUpdate.Content.Key),
-				Chain:        chain.ChainTypeTezos,
-				Contract:     bigMapUpdate.Contract.Address,
-			},
-			Initiator:   value.Initiator,
-			Participant: value.Participant,
-			RefundTime:  refundTime,
+			HashedSecretHex: chain.Hex(bigMapUpdate.Content.Key),
+			Chain:           chain.ChainTypeTezos,
+			ContractAddress: bigMapUpdate.Contract.Address,
+			BlockNumber:     uint64(bigMapUpdate.Level),
+			Initiator:       value.Initiator,
+			Participant:     value.Participant,
+			RefundTime:      refundTime,
 		}
 
 		if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 			if errors.Is(err, chain.ErrMinPayoff) {
-				t.warn().Str("hashed_secret", event.HashedSecret.String()).Msg("skip because of small pay off")
+				t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 				return nil
 			}
 			return err
@@ -529,7 +517,7 @@ func (t *Tezos) parseTokensValueUpdate(bigMapUpdate BigMapUpdate) error {
 			return err
 		}
 
-		t.initChan <- event
+		t.events <- event
 	case BigMapActionUpdateKey:
 	case BigMapActionRemoveKey:
 		ops, err := t.api.GetTransactions(map[string]string{
@@ -556,22 +544,20 @@ func (t *Tezos) parseTokensValueUpdate(bigMapUpdate BigMapUpdate) error {
 					secret = chain.Hex(ops[i].Parameters.Value)
 				}
 
-				t.redeemChan <- chain.RedeemEvent{
-					Event: chain.Event{
-						HashedSecret: chain.Hex(bigMapUpdate.Content.Key),
-						Chain:        chain.ChainTypeTezos,
-						Contract:     bigMapUpdate.Contract.Address,
-					},
-					Secret: secret,
+				t.events <- chain.RedeemEvent{
+					HashedSecretHex: chain.Hex(bigMapUpdate.Content.Key),
+					Chain:           chain.ChainTypeTezos,
+					ContractAddress: bigMapUpdate.Contract.Address,
+					BlockNumber:     uint64(bigMapUpdate.Level),
+					Secret:          secret,
 				}
 				return nil
 			case "refund":
-				t.refundChan <- chain.RefundEvent{
-					Event: chain.Event{
-						HashedSecret: chain.Hex(bigMapUpdate.Content.Key),
-						Chain:        chain.ChainTypeTezos,
-						Contract:     bigMapUpdate.Contract.Address,
-					},
+				t.events <- chain.RefundEvent{
+					HashedSecretHex: chain.Hex(bigMapUpdate.Content.Key),
+					Chain:           chain.ChainTypeTezos,
+					ContractAddress: bigMapUpdate.Contract.Address,
+					BlockNumber:     uint64(bigMapUpdate.Level),
 				}
 				return nil
 			}
@@ -602,19 +588,18 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 	}
 
 	event := chain.InitEvent{
-		Event: chain.Event{
-			HashedSecret: chain.Hex(key.Key),
-			Chain:        chain.ChainTypeTezos,
-			Contract:     contract,
-		},
-		Initiator:   value.Initiator,
-		Participant: value.Participant,
-		RefundTime:  refundTime,
+		HashedSecretHex: chain.Hex(key.Key),
+		Chain:           chain.ChainTypeTezos,
+		ContractAddress: contract,
+		BlockNumber:     uint64(key.FirstLevel),
+		Initiator:       value.Initiator,
+		Participant:     value.Participant,
+		RefundTime:      refundTime,
 	}
 
 	if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 		if errors.Is(err, chain.ErrMinPayoff) {
-			t.warn().Str("hashed_secret", event.HashedSecret.String()).Msg("skip because of small pay off")
+			t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 			return nil
 		}
 		return err
@@ -624,7 +609,7 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 		return err
 	}
 
-	t.initChan <- event
+	t.events <- event
 	return nil
 }
 
@@ -640,19 +625,18 @@ func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
 	}
 
 	event := chain.InitEvent{
-		Event: chain.Event{
-			HashedSecret: chain.Hex(key.Key),
-			Chain:        chain.ChainTypeTezos,
-			Contract:     contract,
-		},
-		Initiator:   value.Initiator,
-		Participant: value.Participant,
-		RefundTime:  refundTime,
+		HashedSecretHex: chain.Hex(key.Key),
+		Chain:           chain.ChainTypeTezos,
+		ContractAddress: contract,
+		BlockNumber:     uint64(key.FirstLevel),
+		Initiator:       value.Initiator,
+		Participant:     value.Participant,
+		RefundTime:      refundTime,
 	}
 
 	if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 		if errors.Is(err, chain.ErrMinPayoff) {
-			t.warn().Str("hashed_secret", event.HashedSecret.String()).Msg("skip because of small pay off")
+			t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 			return nil
 		}
 		return err
@@ -662,7 +646,7 @@ func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
 		return err
 	}
 
-	t.initChan <- event
+	t.events <- event
 	return nil
 }
 
