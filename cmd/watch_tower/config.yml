@@ -1,18 +1,3 @@
-tezos:
-  node: https://rpc.tzkt.io/mainnet
-  tzkt: https://api.tzkt.io
-  contract: KT1VG2WtYdSWz5E7chTeAdDPZNy2MpP8pTfL
-  tokens:
-    - KT1EpQVwqLGSH7vMCWKJnq6Uxi851sEDbhWL
-    - KT1Ap287P1NzsnToSJdA4aqSNjPomRaHBZSr
-  min_payoff: "0"
-ethereum:
-  node: https://main-light.eth.linkpool.io/
-  wss: wss://main-light.eth.linkpool.io/ws
-  eth_address: 0xE9C251cbB4881f9e056e40135E7d3EA9A7d037df
-  erc20_address: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
-  user_address: YOUR_WALLET_ADDRESS_HERE
-  min_payoff: "0"
 restore: true
 types:
   - redeem

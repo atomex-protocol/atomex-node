@@ -15,6 +15,17 @@
                 "config.test.yml"
             ],
             "envFile": "${workspaceFolder}/.env"
+        }, {
+            "name": "Launch Market Maker",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/market_maker",
+            "args": [
+                "-c",
+                "config.test.yml"
+            ],
+            "envFile": "${workspaceFolder}/.env"
         }
     ]
 }

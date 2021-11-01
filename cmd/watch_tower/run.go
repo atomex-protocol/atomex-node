@@ -5,11 +5,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/rs/zerolog/log"
 )
 
-func run(cfg config.Config) error {
+func run(cfg Config) error {
 	watchTower, err := NewWatchTower(cfg)
 	if err != nil {
 		return err

@@ -16,7 +16,14 @@ func LoadAbi() error {
 	if abiAtomexEth == nil {
 		ethABI, err := os.Open("abi/AtomexEthVault.json")
 		if err != nil {
-			return err
+			if os.IsNotExist(err) {
+				ethABI, err = os.Open("../../assets/abi/AtomexEthVault.json")
+				if err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
 		}
 		a, err := abi.JSON(ethABI)
 		if err != nil {
@@ -28,7 +35,14 @@ func LoadAbi() error {
 	if abiAtomexErc20 == nil {
 		erc20ABI, err := os.Open("abi/AtomexErc20Vault.json")
 		if err != nil {
-			return err
+			if os.IsNotExist(err) {
+				erc20ABI, err = os.Open("../../assets/abi/AtomexErc20Vault.json")
+				if err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
 		}
 		a, err := abi.JSON(erc20ABI)
 		if err != nil {

@@ -1,0 +1,11 @@
+WBTC_eth:
+  name: WBTC
+  chain: ethereum
+  contract: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599
+  decimals: 8
+tzBTC_tez:
+  name: tzBTC
+  chain: tezos
+  contract: KT1PWx2mnDueood7fEmfbBDKx1D9BAnnXitn
+  atomex_contract: KT1Ap287P1NzsnToSJdA4aqSNjPomRaHBZSr
+  decimals: 8

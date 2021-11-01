@@ -1,0 +1,4 @@
+from_symbols:
+  XTZUSDT: XTZ_USDT
+to_symbols:
+  XTZ_USDT: XTZUSDT

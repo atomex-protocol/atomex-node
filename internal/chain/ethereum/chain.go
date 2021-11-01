@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
-	"github.com/atomex-protocol/watch_tower/internal/config"
+	"github.com/atomex-protocol/watch_tower/internal/logger"
 	"github.com/ethereum/go-ethereum"
 	abi "github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -20,23 +20,29 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 )
 
 // Ethereum -
 type Ethereum struct {
-	cfg        config.Ethereum
-	client     *ethclient.Client
-	wss        *ethclient.Client
-	subLogs    ethereum.Subscription
-	subHead    ethereum.Subscription
+	cfg     Config
+	client  *ethclient.Client
+	wss     *ethclient.Client
+	subLogs ethereum.Subscription
+	subHead ethereum.Subscription
+
+	address    common.Address
 	privateKey *ecdsa.PrivateKey
+
+	ethContract   common.Address
+	erc20Contract common.Address
 
 	eth       *AtomexEth
 	erc20     *AtomexErc20
 	chainID   *big.Int
 	minPayoff *big.Int
+
+	log zerolog.Logger
 
 	latest int64
 
@@ -48,27 +54,39 @@ type Ethereum struct {
 	wg         sync.WaitGroup
 }
 
+// Config -
+type Config struct {
+	NodeURL       string
+	WssURL        string
+	EthContract   string
+	Erc20Contract string
+	MinPayOff     string
+	LogLevel      zerolog.Level
+}
+
 // New -
-func New(cfg config.Ethereum) (*Ethereum, error) {
-	client, err := ethclient.Dial(cfg.Node)
-	if err != nil {
-		return nil, err
+func New(cfg Config) (*Ethereum, error) {
+	if cfg.LogLevel == 0 {
+		cfg.LogLevel = zerolog.InfoLevel
 	}
-	chainID, err := client.NetworkID(context.Background())
+
+	client, err := ethclient.Dial(cfg.NodeURL)
 	if err != nil {
 		return nil, err
 	}
 
-	wss, err := ethclient.Dial(cfg.Wss)
+	wss, err := ethclient.Dial(cfg.WssURL)
 	if err != nil {
 		return nil, err
 	}
 
-	atomexEth, err := NewAtomexEth(common.HexToAddress(cfg.EthAddress), client)
+	ethContract := common.HexToAddress(cfg.EthContract)
+	atomexEth, err := NewAtomexEth(ethContract, client)
 	if err != nil {
 		return nil, err
 	}
-	atomexErc20, err := NewAtomexErc20(common.HexToAddress(cfg.Erc20Address), client)
+	erc20Contract := common.HexToAddress(cfg.Erc20Contract)
+	atomexErc20, err := NewAtomexErc20(erc20Contract, client)
 	if err != nil {
 		return nil, err
 	}
@@ -79,28 +97,30 @@ func New(cfg config.Ethereum) (*Ethereum, error) {
 	}
 
 	eth := Ethereum{
-		cfg:        cfg,
-		minPayoff:  minPayoff,
-		client:     client,
-		chainID:    chainID,
-		eth:        atomexEth,
-		erc20:      atomexErc20,
-		wss:        wss,
-		logs:       make(chan types.Log, 1024),
-		head:       make(chan *types.Header, 16),
-		events:     make(chan chain.Event, 1024),
-		operations: make(chan chain.Operation, 1024),
-		stop:       make(chan struct{}, 1),
+		cfg:           cfg,
+		minPayoff:     minPayoff,
+		client:        client,
+		eth:           atomexEth,
+		ethContract:   ethContract,
+		erc20:         atomexErc20,
+		erc20Contract: erc20Contract,
+		log:           logger.New(logger.WithLogLevel(cfg.LogLevel), logger.WithModuleName("ethereum")),
+		wss:           wss,
+		logs:          make(chan types.Log, 1024),
+		head:          make(chan *types.Header, 16),
+		events:        make(chan chain.Event, 1024),
+		operations:    make(chan chain.Operation, 1024),
+		stop:          make(chan struct{}, 1),
 	}
 
-	if err := initKeystore(cfg, &eth); err != nil {
+	if err := initKeystore(&eth); err != nil {
 		return nil, err
 	}
 
 	return &eth, nil
 }
 
-func initKeystore(cfg config.Ethereum, e *Ethereum) error {
+func initKeystore(e *Ethereum) error {
 	secret, err := chain.LoadSecret("ETHEREUM_PRIVATE")
 	if err != nil {
 		return err
@@ -110,33 +130,37 @@ func initKeystore(cfg config.Ethereum, e *Ethereum) error {
 		return err
 	}
 	e.privateKey = privateKey
+	e.address = crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	log.Info().Str("blockchain", chain.ChainTypeEthereum.String()).Str("address", cfg.UserAddress).Msg("using address")
+	e.log.Info().Str("address", e.address.Hex()).Msg("using address")
 
 	return nil
 }
 
-func (e *Ethereum) info() *zerolog.Event {
-	return log.Info().Str("blockchain", chain.ChainTypeEthereum.String())
-}
-
-func (e *Ethereum) warn() *zerolog.Event {
-	return log.Warn().Str("blockchain", chain.ChainTypeEthereum.String())
-}
-
-func (e *Ethereum) err() *zerolog.Event {
-	return log.Error().Str("blockchain", chain.ChainTypeEthereum.String())
+// Wallet -
+func (e *Ethereum) Wallet() chain.Wallet {
+	return chain.Wallet{
+		Address: e.address.Hex(),
+		// Private: e.privateKey,
+	}
 }
 
 // Init -
 func (e *Ethereum) Init() error {
-	e.info().Msg("initializing...")
+	e.log.Info().Msg("initializing...")
+
+	chainID, err := e.client.NetworkID(context.Background())
+	if err != nil {
+		return err
+	}
+	e.chainID = chainID
+
 	return LoadAbi()
 }
 
 // Run -
 func (e *Ethereum) Run() error {
-	e.info().Msg("running...")
+	e.log.Info().Msg("running...")
 	latest, err := e.client.BlockNumber(context.Background())
 	if err != nil {
 		return err
@@ -156,8 +180,8 @@ func (e *Ethereum) Run() error {
 func (e *Ethereum) subscribe() error {
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{
-			common.HexToAddress(e.cfg.EthAddress),
-			common.HexToAddress(e.cfg.Erc20Address),
+			e.ethContract,
+			e.erc20Contract,
 		},
 		FromBlock: big.NewInt(e.latest),
 	}
@@ -177,7 +201,7 @@ func (e *Ethereum) subscribe() error {
 }
 
 func (e *Ethereum) reconnect() error {
-	wss, err := ethclient.Dial(e.cfg.Wss)
+	wss, err := ethclient.Dial(e.cfg.WssURL)
 	if err != nil {
 		return errors.Wrap(err, "reconnect Dial")
 	}
@@ -190,7 +214,7 @@ func (e *Ethereum) reconnect() error {
 
 // Close -
 func (e *Ethereum) Close() error {
-	e.info().Msg("closing...")
+	e.log.Info().Msg("closing...")
 	e.stop <- struct{}{}
 	e.wg.Wait()
 
@@ -217,9 +241,47 @@ func (e *Ethereum) Operations() <-chan chain.Operation {
 	return e.operations
 }
 
+// Initiate -
+func (e *Ethereum) Initiate(args chain.InitiateArgs) error {
+	e.log.Info().Str("hashed_secret", args.HashedSecret.String()).Msg("initiate")
+
+	opts, err := e.buildTxOpts()
+	if err != nil {
+		return err
+	}
+
+	hashedSecretBytes, err := args.HashedSecret.Bytes32()
+	if err != nil {
+		return err
+	}
+	var tx *types.Transaction
+
+	refundTime := big.NewInt(args.RefundTime.Unix())
+	participant := common.HexToAddress(args.Participant)
+
+	switch args.Contract {
+	case e.cfg.EthContract:
+		tx, err = e.eth.Initiate(opts, hashedSecretBytes, participant, refundTime, nil, args.PayOff.BigInt(), true)
+	case e.cfg.Erc20Contract:
+		address := common.HexToAddress(args.Contract)
+		tx, err = e.erc20.Initiate(opts, hashedSecretBytes, address, participant, refundTime, nil, args.Amount.BigInt(), args.PayOff.BigInt(), true)
+	}
+	if err != nil {
+		return err
+	}
+
+	e.operations <- chain.Operation{
+		Status:       chain.Pending,
+		Hash:         tx.Hash().Hex(),
+		ChainType:    chain.ChainTypeEthereum,
+		HashedSecret: args.HashedSecret,
+	}
+	return nil
+}
+
 // Redeem -
 func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error {
-	e.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
+	e.log.Info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
 
 	opts, err := e.buildTxOpts()
 	if err != nil {
@@ -238,12 +300,12 @@ func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error
 	var tx *types.Transaction
 
 	switch contract {
-	case e.cfg.EthAddress:
+	case e.cfg.EthContract:
 		tx, err = e.eth.Redeem(opts, hashedSecretBytes, secretBytes)
 		if err != nil {
 			return err
 		}
-	case e.cfg.Erc20Address:
+	case e.cfg.Erc20Contract:
 		tx, err = e.erc20.Redeem(opts, hashedSecretBytes, secretBytes)
 		if err != nil {
 			return err
@@ -261,7 +323,7 @@ func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error
 
 // Refund -
 func (e *Ethereum) Refund(hashedSecret chain.Hex, contract string) error {
-	e.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
+	e.log.Info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
 
 	opts, err := e.buildTxOpts()
 	if err != nil {
@@ -275,12 +337,12 @@ func (e *Ethereum) Refund(hashedSecret chain.Hex, contract string) error {
 	var tx *types.Transaction
 
 	switch contract {
-	case e.cfg.EthAddress:
+	case e.cfg.EthContract:
 		tx, err = e.eth.Refund(opts, hashedSecretBytes)
 		if err != nil {
 			return err
 		}
-	case e.cfg.Erc20Address:
+	case e.cfg.Erc20Contract:
 		tx, err = e.erc20.Refund(opts, hashedSecretBytes)
 		if err != nil {
 			return err
@@ -307,7 +369,7 @@ func (e *Ethereum) buildTxOpts() (*bind.TransactOpts, error) {
 		return nil, err
 	}
 
-	nonce, err := e.client.PendingNonceAt(context.Background(), common.HexToAddress(e.cfg.UserAddress))
+	nonce, err := e.client.PendingNonceAt(context.Background(), e.address)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +384,7 @@ func (e *Ethereum) buildTxOpts() (*bind.TransactOpts, error) {
 
 // Restore -
 func (e *Ethereum) Restore() error {
-	e.info().Msg("restoring...")
+	e.log.Info().Msg("restoring...")
 	ethEvents, err := e.restoreEth()
 	if err != nil {
 		return err
@@ -350,7 +412,7 @@ func (e *Ethereum) restoreEth() ([]chain.Event, error) {
 	for iterInit.Next() {
 		events = append(events, chain.InitEvent{
 			HashedSecretHex: chain.NewHexFromBytes32(iterInit.Event.HashedSecret),
-			ContractAddress: e.cfg.EthAddress,
+			ContractAddress: e.cfg.EthContract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     iterInit.Event.Raw.BlockNumber,
 			Participant:     iterInit.Event.Participant.Hex(),
@@ -371,7 +433,7 @@ func (e *Ethereum) restoreEth() ([]chain.Event, error) {
 	for iterRedeemed.Next() {
 		events = append(events, chain.RedeemEvent{
 			HashedSecretHex: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
-			ContractAddress: e.cfg.EthAddress,
+			ContractAddress: e.cfg.EthContract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     iterRedeemed.Event.Raw.BlockNumber,
 			Secret:          chain.NewHexFromBytes32(iterRedeemed.Event.Secret),
@@ -388,7 +450,7 @@ func (e *Ethereum) restoreEth() ([]chain.Event, error) {
 	for iterRefunded.Next() {
 		events = append(events, chain.RefundEvent{
 			HashedSecretHex: chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret),
-			ContractAddress: e.cfg.EthAddress,
+			ContractAddress: e.cfg.EthContract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     iterRefunded.Event.Raw.BlockNumber,
 		})
@@ -410,7 +472,7 @@ func (e *Ethereum) restoreErc20() ([]chain.Event, error) {
 	for iterInit.Next() {
 		events = append(events, chain.InitEvent{
 			HashedSecretHex: chain.NewHexFromBytes32(iterInit.Event.HashedSecret),
-			ContractAddress: e.cfg.Erc20Address,
+			ContractAddress: e.cfg.Erc20Contract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     iterInit.Event.Raw.BlockNumber,
 			Participant:     iterInit.Event.Participant.Hex(),
@@ -431,7 +493,7 @@ func (e *Ethereum) restoreErc20() ([]chain.Event, error) {
 	for iterRedeemed.Next() {
 		events = append(events, chain.RedeemEvent{
 			HashedSecretHex: chain.NewHexFromBytes32(iterRedeemed.Event.HashedSecret),
-			ContractAddress: e.cfg.Erc20Address,
+			ContractAddress: e.cfg.Erc20Contract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     iterRedeemed.Event.Raw.BlockNumber,
 			Secret:          chain.NewHexFromBytes32(iterRedeemed.Event.Secret),
@@ -448,7 +510,7 @@ func (e *Ethereum) restoreErc20() ([]chain.Event, error) {
 	for iterRefunded.Next() {
 		events = append(events, chain.RefundEvent{
 			HashedSecretHex: chain.NewHexFromBytes32(iterRefunded.Event.HashedSecret),
-			ContractAddress: e.cfg.Erc20Address,
+			ContractAddress: e.cfg.Erc20Contract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     iterRefunded.Event.Raw.BlockNumber,
 		})
@@ -462,9 +524,9 @@ func (e *Ethereum) restoreErc20() ([]chain.Event, error) {
 
 func (e *Ethereum) parseLog(l types.Log) error {
 	switch l.Address.Hex() {
-	case e.cfg.EthAddress:
+	case e.cfg.EthContract:
 		return e.parseLogForContract(abiAtomexEth, ContractTypeEth, l)
-	case e.cfg.Erc20Address:
+	case e.cfg.Erc20Contract:
 		return e.parseLogForContract(abiAtomexErc20, ContractTypeErc20, l)
 	}
 
@@ -505,24 +567,24 @@ func (e *Ethereum) listen() {
 			return
 		case l := <-e.logs:
 			if err := e.parseLog(l); err != nil {
-				e.err().Err(err).Msg("")
+				e.log.Error().Err(err).Msg("")
 			}
 		case head := <-e.head:
 			if err := e.parseHead(head); err != nil {
-				e.err().Err(err).Msg("")
+				e.log.Error().Err(err).Msg("")
 			}
 		case err := <-e.subLogs.Err():
-			e.err().Err(err).Msg("ethereum subscription error")
+			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				if err := e.reconnect(); err != nil {
-					e.err().Err(err).Msg("")
+					e.log.Error().Err(err).Msg("")
 				}
 			}
 		case err := <-e.subHead.Err():
-			e.err().Err(err).Msg("ethereum subscription error")
+			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				if err := e.reconnect(); err != nil {
-					e.err().Err(err).Msg("")
+					e.log.Error().Err(err).Msg("")
 				}
 			}
 		}
@@ -541,13 +603,13 @@ func (e *Ethereum) handleInitiated(abi *abi.ABI, l types.Log, event *abi.Event, 
 		}
 		hashedSecret := chain.Hex(l.Topics[1].Hex()[2:])
 		if e.minPayoff.Cmp(args.PayOff) > 0 {
-			e.warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
+			e.log.Warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
 			return nil
 		}
 
 		e.events <- chain.InitEvent{
 			HashedSecretHex: hashedSecret,
-			ContractAddress: e.cfg.EthAddress,
+			ContractAddress: e.cfg.EthContract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     l.BlockNumber,
 			Participant:     common.BytesToAddress(l.Topics[2].Bytes()).Hex(),
@@ -567,13 +629,13 @@ func (e *Ethereum) handleInitiated(abi *abi.ABI, l types.Log, event *abi.Event, 
 
 		hashedSecret := chain.Hex(l.Topics[1].Hex()[2:])
 		if e.minPayoff.Cmp(args.PayOff) > 0 {
-			e.warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
+			e.log.Warn().Str("hashed_secret", hashedSecret.String()).Msg("skip because of small pay off")
 			return nil
 		}
 
 		e.events <- chain.InitEvent{
 			HashedSecretHex: chain.Hex(l.Topics[1].Hex()[2:]),
-			ContractAddress: e.cfg.Erc20Address,
+			ContractAddress: e.cfg.Erc20Contract,
 			Chain:           chain.ChainTypeEthereum,
 			BlockNumber:     l.BlockNumber,
 			Participant:     l.Topics[3].Hex(),
@@ -629,7 +691,7 @@ func (e *Ethereum) parseHead(head *types.Header) error {
 			continue
 		}
 		address := to.Hex()
-		if address != e.cfg.EthAddress && address != e.cfg.Erc20Address {
+		if address != e.cfg.EthContract && address != e.cfg.Erc20Contract {
 			continue
 		}
 		receipt, err := e.client.TransactionReceipt(context.Background(), txs[i].Hash())

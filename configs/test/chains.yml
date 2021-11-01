@@ -1,0 +1,13 @@
+tezos:
+  node: https://rpc.tzkt.io/granadanet
+  tzkt: https://api.granadanet.tzkt.io
+  contract: KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J
+  tokens:
+    - KT1KHdx4EC7WNVeeTGMr8utCSRczgu2EPCzX
+    - KT1UrqceFxiLbrLdWESwqgSfpZqrjLp7cKPf
+
+ethereum:
+  node: https://ropsten.infura.io/v3/c472af462a664d93a4ca3962ae5e3749
+  wss: wss://ropsten.infura.io/ws/v3/c472af462a664d93a4ca3962ae5e3749
+  eth_address: 0x527d1049837EdF5f99c287a41a87702686082bF8
+  erc20_address: 0x189737A901f57Fc52640F9B96E61019981C6c1eb

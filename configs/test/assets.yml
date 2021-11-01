@@ -1,0 +1,28 @@
+WBTC_eth:
+  name: WBTC
+  chain: ethereum
+  contract: 0x65058d7081fcdc3cd8727dbb7f8f9d52cefdd291
+  decimals: 8
+tzBTC_tez:
+  name: tzBTC
+  chain: tezos
+  contract: KT1XoWRv2cav1FFpkiLsZAj7bFHCVdfXno6Q
+  atomex_contract: KT1VXbgYkHwYVoJMpLU6n5T8wysTxBgeeMNN
+  decimals: 8
+XTZ:
+  name: XTZ
+  chain: tezos
+  atomex_contract: KT1DMsMEwQJ5THj9WdZNt2KxVtJxoEqBtLPT
+  decimals: 6
+USDT:
+  name: USDT
+  chain: ethereum
+  contract: 0x6f2dfa047e202be4ec2c62cd9852d4640d1e70ba
+  decimals: 6
+KUSD_tez:
+  name: KUSD
+  chain: tezos
+  contract: KT1K6PjagwpsYR7D1johejftDKjBKdc485no
+  atomex_contract: KT1KHdx4EC7WNVeeTGMr8utCSRczgu2EPCzX
+  decimals: 18
+

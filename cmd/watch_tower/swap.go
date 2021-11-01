@@ -1,115 +1,18 @@
 package main
 
 import (
-	"time"
-
 	"github.com/atomex-protocol/watch_tower/internal/chain"
-	log "github.com/rs/zerolog/log"
+	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
 )
 
 // Swap -
 type Swap struct {
-	HashedSecret chain.Hex
-	Secret       chain.Hex
-	Status       Status
-	RefundTime   time.Time
-	Initiator    Leg
-	Acceptor     Leg
-	RetryCount   uint
-}
-
-// NewSwap -
-func NewSwap(event chain.Event) *Swap {
-	return &Swap{
-		HashedSecret: event.HashedSecret(),
-		Status:       StatusEmpty,
-	}
-}
-
-func (swap *Swap) log() {
-	log.Info().
-		Str("hashed_secret", swap.HashedSecret.String()).
-		Str("status", swap.Status.String()).
-		Str("initiator_chain", swap.Initiator.ChainType.String()).
-		Str("acceptor_chain", swap.Acceptor.ChainType.String()).
-		Msg("swap info")
-}
-
-// FromInitEvent -
-func (swap *Swap) FromInitEvent(event chain.InitEvent) {
-	if swap.HashedSecret != event.HashedSecret() {
-		return
-	}
-
-	swap.RefundTime = event.RefundTime
-
-	switch swap.Status {
-	case StatusEmpty:
-		swap.Initiator = Leg{
-			ChainType: event.Chain,
-			Address:   event.Initiator,
-			Contract:  event.ContractAddress,
-			Status:    StatusInitiated,
-		}
-		swap.Acceptor = Leg{
-			Address: event.Participant,
-			Status:  StatusEmpty,
-		}
-		swap.Status = StatusInitiatedOnce
-	case StatusInitiatedOnce:
-		swap.Acceptor.ChainType = event.Chain
-		swap.Acceptor.Contract = event.ContractAddress
-		swap.Acceptor.Status = StatusInitiated
-		swap.Status = StatusInitiated
-	}
-}
-
-// FromRedeemEvent -
-func (swap *Swap) FromRedeemEvent(event chain.RedeemEvent) {
-	if swap.HashedSecret != event.HashedSecret() {
-		return
-	}
-	if swap.Secret == "" {
-		swap.Secret = event.Secret
-	}
-
-	switch swap.Status {
-	case StatusEmpty, StatusInitiatedOnce, StatusInitiated:
-		swap.Status = StatusRedeemedOnce
-	case StatusRedeemedOnce:
-		swap.Status = StatusRedeemed
-	}
-
-	if swap.Acceptor.Contract == event.ContractAddress && swap.Acceptor.ChainType == event.Chain {
-		swap.Acceptor.Status = StatusRedeemed
-	}
-	if swap.Initiator.Contract == event.ContractAddress && swap.Initiator.ChainType == event.Chain {
-		swap.Initiator.Status = StatusRedeemed
-	}
-}
-
-// FromRefundEvent -
-func (swap *Swap) FromRefundEvent(event chain.RefundEvent) {
-	if swap.HashedSecret != event.HashedSecret() {
-		return
-	}
-	switch swap.Status {
-	case StatusEmpty, StatusInitiatedOnce, StatusInitiated:
-		swap.Status = StatusRefundedOnce
-	case StatusRefundedOnce:
-		swap.Status = StatusRefunded
-	}
-
-	if swap.Acceptor.Contract == event.ContractAddress && swap.Acceptor.ChainType == event.Chain {
-		swap.Acceptor.Status = StatusRefunded
-	}
-	if swap.Initiator.Contract == event.ContractAddress && swap.Initiator.ChainType == event.Chain {
-		swap.Initiator.Status = StatusRefunded
-	}
+	tools.Swap
+	RetryCount uint
 }
 
 // Leg -
-func (swap *Swap) Leg() *Leg {
+func (swap *Swap) Leg() *tools.Leg {
 	if swap.Acceptor.ChainType == chain.ChainTypeUnknown || swap.Initiator.ChainType == chain.ChainTypeUnknown {
 		return nil
 	}
@@ -125,59 +28,4 @@ func (swap *Swap) Leg() *Leg {
 		return &swap.Acceptor
 	}
 	return nil
-}
-
-// Leg -
-type Leg struct {
-	ChainType chain.ChainType
-	Address   string
-	Contract  string
-	Status    Status
-}
-
-// IsFinished -
-func (leg Leg) IsFinished() bool {
-	return leg.Status == StatusRedeemed || leg.Status == StatusRefunded
-}
-
-// Status -
-type Status int
-
-// String -
-func (s Status) String() string {
-	switch s {
-	case StatusEmpty:
-		return "new"
-	case StatusInitiatedOnce:
-		return "initiated_once"
-	case StatusInitiated:
-		return "initiated"
-	case StatusRedeemedOnce:
-		return "redeemed_once"
-	case StatusRedeemed:
-		return "redeemed"
-	case StatusRefundedOnce:
-		return "refunded_once"
-	case StatusRefunded:
-		return "refunded"
-	default:
-		return "unknown"
-	}
-}
-
-// statuses
-const (
-	StatusEmpty Status = iota
-	StatusInitiatedOnce
-	StatusInitiated
-	StatusRedeemedOnce
-	StatusRedeemed
-	StatusRefundedOnce
-	StatusRefunded
-)
-
-// OperationID -
-type OperationID struct {
-	Hash  string
-	Chain chain.ChainType
 }

@@ -11,12 +11,11 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
-	"github.com/atomex-protocol/watch_tower/internal/config"
+	"github.com/atomex-protocol/watch_tower/internal/logger"
 	"github.com/dipdup-net/go-lib/tzkt/api"
 	"github.com/dipdup-net/go-lib/tzkt/events"
 	"github.com/mitchellh/mapstructure"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 
 	"github.com/goat-systems/go-tezos/v4/forge"
@@ -26,7 +25,7 @@ import (
 
 // Tezos -
 type Tezos struct {
-	cfg        config.Tezos
+	cfg        Config
 	rpc        *rpc.Client
 	api        *api.API
 	eventsTzKT *events.TzKT
@@ -36,6 +35,8 @@ type Tezos struct {
 	chainID    string
 	minPayoff  decimal.Decimal
 
+	log zerolog.Logger
+
 	events     chan chain.Event
 	operations chan chain.Operation
 
@@ -43,8 +44,22 @@ type Tezos struct {
 	wg   sync.WaitGroup
 }
 
+// Config -
+type Config struct {
+	Node      string
+	TzKT      string
+	MinPayOff string
+	Contract  string
+	Tokens    []string
+	LogLevel  zerolog.Level
+}
+
 // New -
-func New(cfg config.Tezos) (*Tezos, error) {
+func New(cfg Config) (*Tezos, error) {
+	if cfg.LogLevel == 0 {
+		cfg.LogLevel = zerolog.InfoLevel
+	}
+
 	client, err := rpc.New(cfg.Node)
 	if err != nil {
 		return nil, err
@@ -60,49 +75,49 @@ func New(cfg config.Tezos) (*Tezos, error) {
 		return nil, err
 	}
 
-	log.Info().Str("blockchain", chain.ChainTypeTezos.String()).Str("address", key.PubKey.GetAddress()).Msg("using address")
-
-	_, block, err := client.Block(&rpc.BlockIDHead{})
-	if err != nil {
-		return nil, err
+	tez := &Tezos{
+		cfg:        cfg,
+		rpc:        client,
+		key:        key,
+		api:        api.New(cfg.TzKT),
+		eventsTzKT: events.NewTzKT(fmt.Sprintf("%s/v1/events", cfg.TzKT)),
+		log:        logger.New(logger.WithLogLevel(cfg.LogLevel), logger.WithModuleName("tezos")),
+		events:     make(chan chain.Event, 1024*16),
+		operations: make(chan chain.Operation, 1024),
+		stop:       make(chan struct{}, 1),
 	}
+
+	tez.log.Info().Str("address", key.PubKey.GetAddress()).Msg("using address")
 
 	minPayoff, err := decimal.NewFromString(cfg.MinPayOff)
 	if err != nil {
 		return nil, err
 	}
+	tez.minPayoff = minPayoff
 
-	return &Tezos{
-		cfg:        cfg,
-		minPayoff:  minPayoff,
-		rpc:        client,
-		key:        key,
-		api:        api.New(cfg.TzKT),
-		chainID:    block.ChainID,
-		eventsTzKT: events.NewTzKT(fmt.Sprintf("%s/v1/events", cfg.TzKT)),
-		events:     make(chan chain.Event, 1024*16),
-		operations: make(chan chain.Operation, 1024),
-		stop:       make(chan struct{}, 1),
-	}, nil
+	return tez, nil
 }
 
-func (t *Tezos) info() *zerolog.Event {
-	return log.Info().Str("blockchain", chain.ChainTypeTezos.String())
-}
-
-func (t *Tezos) warn() *zerolog.Event {
-	return log.Warn().Str("blockchain", chain.ChainTypeTezos.String())
-}
-
-func (t *Tezos) err() *zerolog.Event {
-	return log.Error().Str("blockchain", chain.ChainTypeTezos.String())
+// Wallet -
+func (t *Tezos) Wallet() chain.Wallet {
+	return chain.Wallet{
+		Address: t.key.PubKey.GetAddress(),
+		Private: t.key.GetBytes(),
+	}
 }
 
 // Init -
 func (t *Tezos) Init() error {
-	t.info().Msg("initializing...")
+	t.log.Info().Msg("initializing...")
+	blockHead := new(rpc.BlockIDHead)
+	_, block, err := t.rpc.Block(blockHead)
+	if err != nil {
+		return err
+	}
+	t.chainID = block.ChainID
+
 	_, counter, err := t.rpc.ContractCounter(rpc.ContractCounterInput{
-		BlockID:    &rpc.BlockIDHead{},
+		BlockID:    blockHead,
 		ContractID: t.key.PubKey.GetAddress(),
 	})
 	if err != nil {
@@ -122,7 +137,7 @@ func (t *Tezos) Init() error {
 
 // Run -
 func (t *Tezos) Run() error {
-	t.info().Msg("running...")
+	t.log.Info().Msg("running...")
 	if err := t.eventsTzKT.Connect(); err != nil {
 		return err
 	}
@@ -151,7 +166,7 @@ func (t *Tezos) Run() error {
 
 // Close -
 func (t *Tezos) Close() error {
-	t.info().Msg("closing...")
+	t.log.Info().Msg("closing...")
 	t.stop <- struct{}{}
 	t.wg.Wait()
 
@@ -182,12 +197,12 @@ func (t *Tezos) listen() {
 			switch update.Channel {
 			case events.ChannelBigMap:
 				if err := t.handleBigMapChannel(update); err != nil {
-					t.err().Err(err).Msg("handleBigMapChannel")
+					t.log.Error().Err(err).Msg("handleBigMapChannel")
 					continue
 				}
 			case events.ChannelOperations:
 				if err := t.handleOperationsChannel(update); err != nil {
-					t.err().Err(err).Msg("handleOperationsChannel")
+					t.log.Error().Err(err).Msg("handleOperationsChannel")
 					continue
 				}
 			}
@@ -195,9 +210,116 @@ func (t *Tezos) listen() {
 	}
 }
 
+// Initiate -
+func (t *Tezos) Initiate(args chain.InitiateArgs) error {
+	t.log.Info().Str("hashed_secret", args.HashedSecret.String()).Msg("initiate")
+
+	var value []byte
+	var err error
+	var amount string
+	switch args.Contract {
+	case t.cfg.Contract:
+		amount = args.Amount.String()
+		value, err = json.Marshal(map[string]interface{}{
+			"prim": "Pair",
+			"args": []map[string]interface{}{
+				{
+					"string": args.Participant,
+				}, {
+					"prim": "Pair",
+					"args": []map[string]interface{}{
+						{
+							"prim": "Pair",
+							"args": []map[string]interface{}{
+								{
+									"bytes": args.HashedSecret.String(),
+								}, {
+									"int": args.RefundTime.Unix(),
+								},
+							},
+						}, {
+							"int": args.PayOff.String(),
+						},
+					},
+				},
+			},
+		})
+	default:
+		amount = "0"
+		for i := range t.cfg.Tokens {
+			if t.cfg.Tokens[i] == args.Contract {
+				value, err = json.Marshal(map[string]interface{}{
+					"prim": "Pair",
+					"args": []map[string]interface{}{
+						{
+							"prim": "Pair",
+							"args": []map[string]interface{}{
+								{
+									"prim": "Pair",
+									"args": []map[string]interface{}{
+										{
+											"bytes": args.HashedSecret.String(),
+										},
+										{
+											"string": args.Participant,
+										},
+									},
+								},
+								{
+									"prim": "Pair",
+									"args": []map[string]interface{}{
+										{
+											"int": args.PayOff.String(),
+										},
+										{
+											"int": args.RefundTime.Unix(),
+										},
+									},
+								},
+							},
+						}, {
+							"prim": "Pair",
+							"args": []map[string]interface{}{
+								{
+									"string": args.TokenAddress,
+								},
+								{
+									"int": args.Amount.String(),
+								},
+							},
+						},
+					},
+				})
+				break
+			}
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if value == nil {
+		return nil
+	}
+
+	opHash, err := t.sendTransaction(args.Contract, amount, "50000", "22000", "initiate", json.RawMessage(value))
+	if err != nil {
+		return err
+	}
+	t.operations <- chain.Operation{
+		Status:       chain.Pending,
+		Hash:         opHash,
+		ChainType:    chain.ChainTypeTezos,
+		HashedSecret: args.HashedSecret,
+	}
+
+	return nil
+}
+
 // Redeem -
 func (t *Tezos) Redeem(hashedSecret, secret chain.Hex, contract string) error {
-	t.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
+	t.log.Info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
 
 	value, err := json.Marshal(map[string]interface{}{
 		"bytes": secret,
@@ -221,7 +343,7 @@ func (t *Tezos) Redeem(hashedSecret, secret chain.Hex, contract string) error {
 
 // Refund -
 func (t *Tezos) Refund(hashedSecret chain.Hex, contract string) error {
-	t.info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
+	t.log.Info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
 
 	value, err := json.Marshal(map[string]interface{}{
 		"bytes": hashedSecret,
@@ -245,7 +367,7 @@ func (t *Tezos) Refund(hashedSecret chain.Hex, contract string) error {
 
 // Restore -
 func (t *Tezos) Restore() error {
-	t.info().Msg("restoring...")
+	t.log.Info().Msg("restoring...")
 	for _, bm := range t.bigMaps {
 		if err := t.restoreFromBigMap(bm); err != nil {
 			return err
@@ -423,7 +545,7 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 
 		if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 			if errors.Is(err, chain.ErrMinPayoff) {
-				t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
+				t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 				return nil
 			}
 			return err
@@ -507,7 +629,7 @@ func (t *Tezos) parseTokensValueUpdate(bigMapUpdate BigMapUpdate) error {
 
 		if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 			if errors.Is(err, chain.ErrMinPayoff) {
-				t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
+				t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 				return nil
 			}
 			return err
@@ -599,7 +721,7 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 
 	if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 		if errors.Is(err, chain.ErrMinPayoff) {
-			t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
+			t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 			return nil
 		}
 		return err
@@ -636,7 +758,7 @@ func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
 
 	if err := event.SetPayOff(value.Payoff, t.minPayoff); err != nil {
 		if errors.Is(err, chain.ErrMinPayoff) {
-			t.warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
+			t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 			return nil
 		}
 		return err

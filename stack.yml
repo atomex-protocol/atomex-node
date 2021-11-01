@@ -5,7 +5,9 @@ services:
     image: ${DOCKER_REGISTRY:-atomex}/watch-tower
     build:
       context: .
-      dockerfile: build/Dockerfile
+      dockerfile: build/watch-tower/Dockerfile
+      env:
+        - ATOMEX_PROTOCOL_ENV=test
       args:
         - config_file=config.test.yml
     restart: unless-stopped
