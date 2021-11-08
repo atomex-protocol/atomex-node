@@ -9,6 +9,8 @@ type Args struct {
 	bid       decimal.Decimal
 	bidVolume decimal.Decimal
 	close     decimal.Decimal
+
+	symbol string
 }
 
 // NewArgs -
@@ -43,5 +45,11 @@ func (a *Args) AskVolume(volume decimal.Decimal) *Args {
 // Close -
 func (a *Args) Close(value decimal.Decimal) *Args {
 	a.close = value
+	return a
+}
+
+// Symbol -
+func (a *Args) Symbol(symbol string) *Args {
+	a.symbol = symbol
 	return a
 }

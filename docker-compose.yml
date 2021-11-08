@@ -6,6 +6,8 @@ services:
     build:
         dockerfile: build/Dockerfile
         context: .
+        env:
+          ATOMEX_PROTOCOL_ENV=production
         args:
           - config_file=config.yml
     restart: always

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -70,12 +71,27 @@ func main() {
 	if err != nil {
 		log.Panic().Err(err).Msg("NewMarketMaker")
 	}
-	if err := marketMaker.Start(); err != nil {
-		log.Panic().Err(err).Msg("marketMaker.Start")
-	}
+
+	ctx := context.Background()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error().Interface("panic", err).Msg("panic occurred")
+
+			if err := marketMaker.Close(); err != nil {
+				log.Err(err).Msg("marketMaker.Close")
+			}
+
+			signals <- syscall.SIGINT
+		}
+	}()
+
+	if err := marketMaker.Start(ctx); err != nil {
+		log.Panic().Err(err).Msg("marketMaker.Start")
+	}
 
 	<-signals
 

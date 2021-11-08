@@ -135,3 +135,14 @@ const (
 	WebsocketTypeMarketData WebsocketType = iota + 1
 	WebsocketTypeExchange
 )
+
+// String -
+func (typ WebsocketType) String() string {
+	switch typ {
+	case WebsocketTypeMarketData:
+		return "WebsocketTypeMarketData"
+	case WebsocketTypeExchange:
+		return "WebsocketTypeExchange"
+	}
+	return ""
+}

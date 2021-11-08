@@ -2,10 +2,11 @@ package config
 
 // Atomex -
 type Atomex struct {
-	Symbols  map[string]string `yaml:"symbols"`
-	Settings AtomexSetiings    `yaml:"settings"`
-	RestAPI  string            `yaml:"rest_api"`
-	WsAPI    string            `yaml:"wss"`
+	ToSymbols   map[string]string `yaml:"to_symbols"`
+	FromSymbols map[string]string `yaml:"from_symbols"`
+	Settings    AtomexSetiings    `yaml:"settings"`
+	RestAPI     string            `yaml:"rest_api"`
+	WsAPI       string            `yaml:"wss"`
 }
 
 // AtomexSetiings -

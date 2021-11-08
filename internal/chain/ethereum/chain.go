@@ -218,10 +218,18 @@ func (e *Ethereum) Close() error {
 	e.stop <- struct{}{}
 	e.wg.Wait()
 
-	e.subLogs.Unsubscribe()
-	e.subHead.Unsubscribe()
-	e.wss.Close()
-	e.client.Close()
+	if e.subLogs != nil {
+		e.subLogs.Unsubscribe()
+	}
+	if e.subHead != nil {
+		e.subHead.Unsubscribe()
+	}
+	if e.wss != nil {
+		e.wss.Close()
+	}
+	if e.client != nil {
+		e.client.Close()
+	}
 
 	close(e.logs)
 	close(e.head)

@@ -18,16 +18,28 @@ func NewOneByOne(cfg Config) *OneByOne {
 func (s *OneByOne) Quotes(args *Args) ([]Quote, error) {
 	return []Quote{
 		{
-			Side:   Bid,
-			Price:  decimal.NewFromInt(1).Sub(s.spread.Bid),
-			Volume: s.volume,
-			Symbol: s.symbol,
+			Side:     Bid,
+			Price:    decimal.NewFromInt(1).Sub(s.spread.Bid),
+			Volume:   s.volume,
+			Symbol:   s.symbol,
+			Strategy: KindOneByOne,
 		},
 		{
-			Side:   Ask,
-			Price:  decimal.NewFromInt(1).Add(s.spread.Ask),
-			Volume: s.volume,
-			Symbol: s.symbol,
+			Side:     Ask,
+			Price:    decimal.NewFromInt(1).Add(s.spread.Ask),
+			Volume:   s.volume,
+			Symbol:   s.symbol,
+			Strategy: KindOneByOne,
 		},
 	}, nil
+}
+
+// Is -
+func (s *OneByOne) Is(kind Kind) bool {
+	return KindOneByOne == kind
+}
+
+// Kind -
+func (s *OneByOne) Kind() Kind {
+	return KindOneByOne
 }

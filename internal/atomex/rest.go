@@ -2,6 +2,7 @@ package atomex
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,7 +49,7 @@ func NewRest(opts ...RestOption) *Rest {
 	return r
 }
 
-func (rest *Rest) request(method string, path string, args url.Values, body interface{}, output interface{}) error {
+func (rest *Rest) request(ctx context.Context, method string, path string, args url.Values, body interface{}, output interface{}) error {
 	client := http.Client{
 		Timeout: rest.timeout,
 	}
@@ -78,7 +79,7 @@ func (rest *Rest) request(method string, path string, args url.Values, body inte
 
 	trace.Msg("client->server")
 
-	req, err := http.NewRequest(method, uri.String(), bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, uri.String(), bodyReader)
 	if err != nil {
 		return errors.Wrap(err, "http.NewRequest")
 	}
@@ -110,19 +111,19 @@ func (rest *Rest) request(method string, path string, args url.Values, body inte
 }
 
 // Token - get authentication token
-func (rest *Rest) Token(keys *signers.Key) (response TokenResponse, err error) {
+func (rest *Rest) Token(ctx context.Context, keys *signers.Key) (response TokenResponse, err error) {
 	req := newTokenRequest(signMessage, rest.algo, keys.Public)
 	if err := req.sign(keys); err != nil {
 		return response, errors.Wrap(err, "sign")
 	}
 
-	err = rest.request(http.MethodPost, "Token", nil, req, &response)
+	err = rest.request(ctx, http.MethodPost, "Token", nil, req, &response)
 	return
 }
 
 // Auth - authenticate `Rest` in atomex server
-func (rest *Rest) Auth(keys *signers.Key) error {
-	token, err := rest.Token(keys)
+func (rest *Rest) Auth(ctx context.Context, keys *signers.Key) error {
+	token, err := rest.Token(ctx, keys)
 	if err != nil {
 		return errors.Wrap(err, "Token")
 	}
@@ -131,83 +132,83 @@ func (rest *Rest) Auth(keys *signers.Key) error {
 }
 
 // TopOfBookQuotes -
-func (rest *Rest) TopOfBookQuotes(symbols ...string) (response []TopOfBook, err error) {
+func (rest *Rest) TopOfBookQuotes(ctx context.Context, symbols ...string) (response []TopOfBook, err error) {
 	args := make(url.Values)
 	if len(symbols) > 0 {
 		args.Add("symbols", strings.Join(symbols, ","))
 	}
-	err = rest.request(http.MethodGet, "MarketData/quotes", args, nil, &response)
+	err = rest.request(ctx, http.MethodGet, "MarketData/quotes", args, nil, &response)
 	return
 }
 
 // OrderBook -
-func (rest *Rest) OrderBook(symbol string) (response OrderBook, err error) {
+func (rest *Rest) OrderBook(ctx context.Context, symbol string) (response OrderBook, err error) {
 	if symbol == "" {
 		return response, errors.New("empty symbol in OrderBook request")
 	}
 	args := make(url.Values)
 	args.Add("symbol", symbol)
-	err = rest.request(http.MethodGet, "MarketData/book", args, nil, &response)
+	err = rest.request(ctx, http.MethodGet, "MarketData/book", args, nil, &response)
 	return
 }
 
 // AddOrder -
-func (rest *Rest) AddOrder(req AddOrderRequest) (response AddOrderResponse, err error) {
-	err = rest.request(http.MethodPost, "Orders", nil, req, &response)
+func (rest *Rest) AddOrder(ctx context.Context, req AddOrderRequest) (response AddOrderResponse, err error) {
+	err = rest.request(ctx, http.MethodPost, "Orders", nil, req, &response)
 	return
 }
 
 // Orders -
-func (rest *Rest) Orders(req OrdersRequest) (response []Order, err error) {
-	err = rest.request(http.MethodGet, "Orders", req.getArgs(), nil, &response)
+func (rest *Rest) Orders(ctx context.Context, req OrdersRequest) (response []Order, err error) {
+	err = rest.request(ctx, http.MethodGet, "Orders", req.getArgs(), nil, &response)
 	return
 }
 
 // Order -
-func (rest *Rest) Order(id int64) (response Order, err error) {
+func (rest *Rest) Order(ctx context.Context, id int64) (response Order, err error) {
 	if id < 1 {
 		return response, errors.Errorf("invalid order id: %d", id)
 	}
 	urlPath := fmt.Sprintf("Orders/%d", id)
-	err = rest.request(http.MethodGet, urlPath, nil, nil, &response)
+	err = rest.request(ctx, http.MethodGet, urlPath, nil, nil, &response)
 	return
 }
 
 // CancelOrder -
-func (rest *Rest) CancelOrder(id int64) (response DefaultResponse, err error) {
+func (rest *Rest) CancelOrder(ctx context.Context, id int64) (response DefaultResponse, err error) {
 	if id < 1 {
 		return response, errors.Errorf("invalid order id: %d", id)
 	}
 	urlPath := fmt.Sprintf("Orders/%d", id)
-	err = rest.request(http.MethodDelete, urlPath, nil, nil, &response)
+	err = rest.request(ctx, http.MethodDelete, urlPath, nil, nil, &response)
 	return
 }
 
 // Swap -
-func (rest *Rest) Swap(id int64) (response Swap, err error) {
+func (rest *Rest) Swap(ctx context.Context, id int64) (response Swap, err error) {
 	if id < 1 {
 		return response, errors.Errorf("invalid order id: %d", id)
 	}
 	urlPath := fmt.Sprintf("Swaps/%d", id)
-	err = rest.request(http.MethodGet, urlPath, nil, nil, &response)
+	err = rest.request(ctx, http.MethodGet, urlPath, nil, nil, &response)
 	return
 }
 
 // Swaps -
-func (rest *Rest) Swaps(req SwapsRequest) (response []Swap, err error) {
-	err = rest.request(http.MethodGet, "Swaps", req.getArgs(), nil, &response)
+func (rest *Rest) Swaps(ctx context.Context, req SwapsRequest) (response []Swap, err error) {
+	err = rest.request(ctx, http.MethodGet, "Swaps", req.getArgs(), nil, &response)
 	return
 }
 
 // AddSwapRequisites -
-func (rest *Rest) AddSwapRequisites(id int64, req AddSwapRequisitesRequest) (response DefaultResponse, err error) {
+func (rest *Rest) AddSwapRequisites(ctx context.Context, id int64, req AddSwapRequisitesRequest) (response DefaultResponse, err error) {
 	urlPath := fmt.Sprintf("Swaps/%d/requisites", id)
-	err = rest.request(http.MethodPost, urlPath, nil, req, &response)
+	err = rest.request(ctx, http.MethodPost, urlPath, nil, req, &response)
 	return
 }
 
 // SymbolInfo -
-func (rest *Rest) SymbolInfo() (response []SymbolInfo, err error) {
-	err = rest.request(http.MethodGet, "Symbols", nil, nil, &response)
+func (rest *Rest) SymbolInfo(ctx context.Context) (response []SymbolInfo, err error) {
+	err = rest.request(ctx, http.MethodGet, "Symbols", nil, nil, &response)
 	return
 }

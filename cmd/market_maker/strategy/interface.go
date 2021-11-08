@@ -8,6 +8,7 @@ import (
 // Strategy -
 type Strategy interface {
 	Quotes(args *Args) ([]Quote, error)
+	Is(kind Kind) bool
 }
 
 // New -
@@ -35,6 +36,7 @@ const (
 	KindFollow     = "follow"
 	KindOneByOne   = "one-by-one"
 	KindVolatility = "volatility"
+	KindUnknown    = "unknown"
 )
 
 // Spread -
@@ -62,10 +64,11 @@ func (s *Spread) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // Quote -
 type Quote struct {
-	Symbol string
-	Side   Side
-	Price  decimal.Decimal
-	Volume decimal.Decimal
+	Symbol   string
+	Side     Side
+	Price    decimal.Decimal
+	Volume   decimal.Decimal
+	Strategy Kind
 }
 
 // Side -

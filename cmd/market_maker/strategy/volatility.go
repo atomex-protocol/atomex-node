@@ -33,3 +33,13 @@ func (s *Volatility) Quotes(args *Args) ([]Quote, error) {
 
 	return []Quote{}, ErrNotImplemented
 }
+
+// Is -
+func (s *Volatility) Is(kind Kind) bool {
+	return KindVolatility == kind
+}
+
+// Kind -
+func (s *Volatility) Kind() Kind {
+	return KindVolatility
+}

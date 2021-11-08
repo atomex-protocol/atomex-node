@@ -5,7 +5,12 @@ settings:
   reward_for_redeem: 0
   lock_time: 3600
 
-symbols:
+to_symbols:
   WBTC_tzBTC: WBTC/tzBTC
   XTZ_USDT: XTZ/USDT
   KUSD_USDT: KUSD/USDT
+
+from_symbols:
+  WBTC/tzBTC: WBTC_tzBTC
+  XTZ/USDT: XTZ_USDT
+  KUSD/USDT: KUSD_USDT

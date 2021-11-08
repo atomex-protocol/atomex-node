@@ -21,7 +21,6 @@ import (
 type Websocket struct {
 	url       *url.URL
 	uri       string
-	restURI   string
 	conn      *websocket.Conn
 	requestID uint64
 	algo      string
@@ -73,7 +72,6 @@ func NewWebsocket(typ WebsocketType, opts ...WebsocketOption) (*Websocket, error
 		stop:      make(chan struct{}, 2),
 		logger:    logger.New(logger.WithModuleName(typ.String())),
 		uri:       WebsocketAPI,
-		restURI:   BaseURLRestAPIws,
 	}
 
 	for i := range opts {
@@ -99,11 +97,7 @@ func NewWebsocket(typ WebsocketType, opts ...WebsocketOption) (*Websocket, error
 }
 
 // Connect -
-func (ws *Websocket) Connect(keys *signers.Key) error {
-	token, err := NewRest(WithURL(ws.restURI), WithSignatureAlgorithm(ws.algo)).Token(keys)
-	if err != nil {
-		return errors.Wrap(err, "Token")
-	}
+func (ws *Websocket) Connect(token TokenResponse) error {
 	ws.token = token
 
 	header := make(http.Header)
@@ -134,8 +128,10 @@ func (ws *Websocket) close() error {
 	ws.stop <- struct{}{} // for ping
 	ws.wg.Wait()
 
-	if err := ws.conn.Close(); err != nil {
-		return err
+	if ws.conn != nil {
+		if err := ws.conn.Close(); err != nil {
+			return err
+		}
 	}
 
 	close(ws.errorChan)
@@ -290,7 +286,7 @@ func (ws *Websocket) handleMessage(msg WebsocketResponse) error {
 		}
 		ws.msgs <- Message{msg.Event, entries}
 	case WebsocketMethodOrderReply:
-		var order Order
+		var order OrderWebsocket
 		if err := json.Unmarshal(*msg.Data, &order); err != nil {
 			return err
 		}
@@ -302,17 +298,17 @@ func (ws *Websocket) handleMessage(msg WebsocketResponse) error {
 		}
 		ws.msgs <- Message{msg.Event, swap}
 	case WebsocketMethodOrderSendReply:
-		orderID, err := strconv.ParseInt(string(*msg.Data), 10, 64)
-		if err != nil {
+		var reply AddOrderWebsocketResponse
+		if err := json.Unmarshal(*msg.Data, &reply); err != nil {
 			return err
 		}
-		ws.msgs <- Message{msg.Event, orderID}
+		ws.msgs <- Message{msg.Event, reply}
 	case WebsocketMethodOrderCancelReply:
-		orderID, err := strconv.ParseInt(string(*msg.Data), 10, 64)
-		if err != nil {
+		var reply CancelOrderWebsocketResponse
+		if err := json.Unmarshal(*msg.Data, &reply); err != nil {
 			return err
 		}
-		ws.msgs <- Message{msg.Event, orderID}
+		ws.msgs <- Message{msg.Event, reply}
 	case WebsocketMethodGetOrderReply:
 		var order Order
 		if err := json.Unmarshal(*msg.Data, &order); err != nil {

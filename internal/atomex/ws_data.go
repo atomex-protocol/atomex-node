@@ -2,6 +2,7 @@ package atomex
 
 import (
 	stdJSON "encoding/json"
+	"time"
 
 	"github.com/shopspring/decimal"
 )
@@ -74,4 +75,32 @@ type TopOfBookWebsocket struct {
 type Message struct {
 	Event WebsocketMethod
 	Value interface{}
+}
+
+// AddOrderWebsocketResponse -
+type AddOrderWebsocketResponse struct {
+	OrderID       int64  `json:"orderId"`
+	ClientOrderID string `json:"clientOrderId"`
+}
+
+// CancelOrderWebsocketResponse -
+type CancelOrderWebsocketResponse struct {
+	OrderID int64 `json:"orderId"`
+	Result  bool  `json:"result"`
+}
+
+// OrderWebsocket -
+type OrderWebsocket struct {
+	ID            int64           `json:"id"`
+	ClientOrderID string          `json:"clientOrderId"`
+	Symbol        string          `json:"symbol"`
+	Side          Side            `json:"side"`
+	Timestamp     time.Time       `json:"timeStamp"`
+	Price         decimal.Decimal `json:"price"`
+	Qty           decimal.Decimal `json:"qty"`
+	LeaveQty      decimal.Decimal `json:"leaveQty"`
+	Type          OrderType       `json:"type"`
+	Status        OrderStatus     `json:"status"`
+	Trades        []Trade         `json:"trades"`
+	Swaps         []int64         `json:"swaps"`
 }

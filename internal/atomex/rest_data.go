@@ -125,11 +125,11 @@ type AddOrderResponse struct {
 
 // OrdersRequest -
 type OrdersRequest struct {
-	Symbols []string `json:"symbols"`
-	Sort    Sort     `json:"sort"`
-	Offset  uint64   `json:"offset"`
-	Limit   uint64   `json:"limit"`
-	Active  bool     `json:"onlyActive"`
+	Symbols []string `json:"symbols,omitempty"`
+	Sort    Sort     `json:"sort,omitempty"`
+	Offset  uint64   `json:"offset,omitempty"`
+	Limit   uint64   `json:"limit,omitempty"`
+	Active  bool     `json:"onlyActive,omitempty"`
 }
 
 func (req OrdersRequest) getArgs() url.Values {
@@ -154,7 +154,7 @@ func (req OrdersRequest) getArgs() url.Values {
 }
 
 // Order -
-type Order []struct {
+type Order struct {
 	ID            int64           `json:"id"`
 	ClientOrderID string          `json:"clientOrderId"`
 	Symbol        string          `json:"symbol"`
@@ -171,7 +171,7 @@ type Order []struct {
 
 // Swap -
 type Swap struct {
-	ID           int             `json:"id"`
+	ID           int64           `json:"id"`
 	Symbol       string          `json:"symbol"`
 	Side         Side            `json:"side"`
 	TimeStamp    time.Time       `json:"timeStamp"`
@@ -243,6 +243,8 @@ func (req SwapsRequest) getArgs() url.Values {
 	}
 	if req.Sort != "" {
 		args.Add("sort", string(req.Sort))
+	} else {
+		args.Add("sort", string(SortDesc))
 	}
 	if req.Offset > 0 && req.Offset <= 2147483647 {
 		args.Add("offset", strconv.FormatUint(req.Offset, 10))

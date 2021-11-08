@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
+	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/rs/zerolog"
 )
 
@@ -15,6 +16,7 @@ type Swap struct {
 	RefundTime   time.Time
 	Initiator    Leg
 	Acceptor     Leg
+	Symbol       types.Symbol
 }
 
 // NewSwap -

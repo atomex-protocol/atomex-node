@@ -61,13 +61,6 @@ func WithWebsocketURI(uri string) WebsocketOption {
 	}
 }
 
-// WithWebsocketRestURI -
-func WithWebsocketRestURI(uri string) WebsocketOption {
-	return func(ws *Websocket) {
-		ws.restURI = uri
-	}
-}
-
 // WithSignature -
 func WithSignature(algo string) WebsocketOption {
 	return func(ws *Websocket) {
