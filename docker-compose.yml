@@ -4,7 +4,7 @@ services:
   watch_tower:
     image: atomex-protocol/watch_tower:${TAG:-latest}
     build:
-        dockerfile: build/Dockerfile
+        dockerfile: build/watch_tower/Dockerfile
         context: .
         env:
           ATOMEX_PROTOCOL_ENV=production

@@ -42,7 +42,7 @@ jobs:
     - name: Checkout the code
       uses: actions/checkout@v2
     - name: Build the Docker image
-      run: docker build . --file build/Dockerfile --tag localbuild/testimage:latest --build-arg config_file=config.test.yml
+      run: docker build . --file build/watch_tower/Dockerfile --tag localbuild/testimage:latest --build-arg config_file=config.test.yml
     - name: Run the Anchore scan action itself with GitHub Advanced Security code scanning integration enabled
       uses: anchore/scan-action@main
       with:
