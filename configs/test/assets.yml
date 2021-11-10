@@ -25,4 +25,9 @@ KUSD_tez:
   contract: KT1K6PjagwpsYR7D1johejftDKjBKdc485no
   atomex_contract: KT1KHdx4EC7WNVeeTGMr8utCSRczgu2EPCzX
   decimals: 18
+ETH:
+  name: ETH
+  chain: ethereum
+  atomex_contract: 0xE9C251cbB4881f9e056e40135E7d3EA9A7d037df
+  decimals: 18
 

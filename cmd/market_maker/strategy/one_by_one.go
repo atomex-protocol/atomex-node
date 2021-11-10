@@ -1,6 +1,9 @@
 package strategy
 
-import "github.com/shopspring/decimal"
+import (
+	"github.com/pkg/errors"
+	"github.com/shopspring/decimal"
+)
 
 //  OneByOne -
 type OneByOne struct {
@@ -16,6 +19,12 @@ func NewOneByOne(cfg Config) *OneByOne {
 
 // Quotes -
 func (s *OneByOne) Quotes(args *Args) ([]Quote, error) {
+	if args == nil {
+		return nil, errors.Wrapf(ErrInvalidArg, "nil")
+	}
+	if args.symbol != s.symbol {
+		return nil, nil
+	}
 	return []Quote{
 		{
 			Side:     Bid,

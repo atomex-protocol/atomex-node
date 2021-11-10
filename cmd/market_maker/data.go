@@ -1,11 +1,16 @@
 package main
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
 	"github.com/atomex-protocol/watch_tower/internal/atomex"
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
+	"github.com/pkg/errors"
 )
 
 // Order -
@@ -130,4 +135,39 @@ func (swaps *SwapsMap) Range(handler func(hashedSecret chain.Hex, swap *tools.Sw
 	}
 
 	swaps.mx.RUnlock()
+}
+
+type clientOrderID struct {
+	kind   strategy.Kind
+	symbol string
+	side   strategy.Side
+	index  uint64
+}
+
+func (c clientOrderID) String() string {
+	return fmt.Sprintf("%s|%s|%d|%d", c.kind, c.symbol, c.side, c.index)
+}
+
+func (c *clientOrderID) parse(str string) error {
+	parts := strings.Split(str, "|")
+	if len(parts) != 4 {
+		return errors.Errorf("invalid client order id '%s'", str)
+	}
+
+	c.kind = strategy.Kind(parts[0])
+	c.symbol = parts[1]
+
+	side, err := strconv.ParseInt(parts[2], 10, 32)
+	if err != nil {
+		return errors.Wrapf(err, "invalid client order id '%s'", str)
+	}
+	c.side = strategy.Side(side)
+
+	index, err := strconv.ParseUint(parts[3], 10, 64)
+	if err != nil {
+		return errors.Wrapf(err, "invalid client order id '%s'", str)
+	}
+	c.index = index
+
+	return nil
 }

@@ -66,6 +66,7 @@ func main() {
 	if err := config.Load(quoteProviderFile, &quoteProviderConfig); err != nil {
 		log.Panic().Err(err).Str("file", quoteProviderFile).Msg("config.Load")
 	}
+	cfg.QuoteProvider.Meta = quoteProviderConfig
 
 	marketMaker, err := NewMarketMaker(cfg)
 	if err != nil {
@@ -80,10 +81,6 @@ func main() {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Error().Interface("panic", err).Msg("panic occurred")
-
-			if err := marketMaker.Close(); err != nil {
-				log.Err(err).Msg("marketMaker.Close")
-			}
 
 			signals <- syscall.SIGINT
 		}

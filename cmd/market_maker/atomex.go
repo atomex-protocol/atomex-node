@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"sync/atomic"
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
+	"github.com/atomex-protocol/watch_tower/cmd/market_maker/synthetic"
 	"github.com/atomex-protocol/watch_tower/internal/atomex"
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/exchange"
@@ -40,7 +42,7 @@ func (mm *MarketMaker) handleAtomexUpdate(data atomex.Message) error {
 	switch val := data.Value.(type) {
 
 	case atomex.OrderWebsocket:
-		mm.log.Info().Int64("id", val.ID).Str("status", string(val.Status)).Msg("atomex order status changed")
+		mm.log.Info().Int64("id", val.ID).Str("status", string(val.Status)).Str("price", val.Price.String()).Str("leave_qty", val.LeaveQty.String()).Msg("atomex order status changed")
 
 		if err := mm.handleAtomexOrderUpdate(val); err != nil {
 			return err
@@ -70,7 +72,7 @@ func (mm *MarketMaker) sendOneByOneLimits() error {
 		}
 
 		for i := range quotes {
-			if err := mm.sendOrder(quotes[i], i); err != nil {
+			if err := mm.sendOrder(quotes[i]); err != nil {
 				return err
 			}
 		}
@@ -84,22 +86,39 @@ func (mm *MarketMaker) sendLimitsByTicker(tick exchange.Ticker) error {
 		return errors.Errorf("unknown provider symbol: %s", tick.Symbol)
 	}
 
-	args := strategy.NewArgs().Ask(tick.Ask).Bid(tick.Bid).AskVolume(tick.AskVolume).BidVolume(tick.BidVolume).Symbol(symbol)
-	for i := range mm.strategies {
-		quotes, err := mm.strategies[i].Quotes(args)
+	return mm.processTicker(tick, symbol)
+}
+
+func (mm *MarketMaker) processTicker(tick exchange.Ticker, symbol string) error {
+	for synthSymbol, synth := range mm.synthetics {
+		ticker, err := synth.Ticker(tick, mm.tickers, mm.quoteProviderMeta.ToSymbols)
 		if err != nil {
-			return errors.Wrap(err, "Quotes")
+			if errors.Is(err, synthetic.ErrInvalidSymbol) || errors.Is(err, synthetic.ErrUnknownTicker) {
+				continue
+			}
+			return errors.Wrap(err, "synthetic.Ticker")
 		}
-		for j := range quotes {
-			if err := mm.sendOrder(quotes[j], i); err != nil {
-				return err
+
+		mm.tickers[ticker.Symbol] = ticker
+
+		args := strategy.NewArgs().Ask(ticker.Ask).Bid(ticker.Bid).AskVolume(ticker.AskVolume).BidVolume(ticker.BidVolume).Symbol(synthSymbol)
+		for i := range mm.strategies {
+			quotes, err := mm.strategies[i].Quotes(args)
+			if err != nil {
+				return errors.Wrap(err, "Quotes")
+			}
+			for j := range quotes {
+				if err := mm.sendOrder(quotes[j]); err != nil {
+					return errors.Wrap(err, "sendOrder")
+				}
 			}
 		}
 	}
+
 	return nil
 }
 
-func (mm *MarketMaker) sendOrder(quote strategy.Quote, index int) error {
+func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 	symbol, ok := mm.atomexMeta.ToSymbols[quote.Symbol]
 	if !ok {
 		return nil
@@ -114,23 +133,29 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote, index int) error {
 	qty, _ := quote.Volume.Float64()
 	side := mustAtomexSide(quote.Side)
 
-	clientOrderID := clientOrderID{
+	clientID := clientOrderID{
 		kind:   quote.Strategy,
 		symbol: quote.Symbol,
 		side:   quote.Side,
-		index:  index,
+		index:  atomic.AddUint64(&mm.ordersCounter, 1),
 	}
 
-	if existingOrder, ok := mm.orders.Load(clientOrderID); ok {
-		if existingOrder.Price == price {
-			return nil
-		} else if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
-			ID:     existingOrder.ID,
-			Symbol: existingOrder.Symbol,
-			Side:   existingOrder.Side,
-		}); err != nil {
-			return err
+	var cancelErr error
+	mm.orders.Range(func(cid clientOrderID, order *Order) bool {
+		if cid.kind == clientID.kind && cid.side == clientID.side && cid.symbol == clientID.symbol {
+			if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
+				ID:     order.ID,
+				Symbol: order.Symbol,
+				Side:   order.Side,
+			}); err != nil {
+				cancelErr = err
+				return false
+			}
 		}
+		return true
+	})
+	if cancelErr != nil {
+		return errors.Wrap(cancelErr, "atomex.CancelOrder")
 	}
 
 	receiver, err := mm.getReceiverWallet(symbolInfo, quote.Side)
@@ -149,15 +174,15 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote, index int) error {
 	}
 
 	request := atomex.AddOrderRequest{
-		ClientOrderID: clientOrderID.String(),
+		ClientOrderID: clientID.String(),
 		Symbol:        symbol,
 		Price:         price,
 		Qty:           qty,
 		Side:          side,
 		Type:          atomex.OrderTypeReturn,
 		Requisites: &atomex.Requisites{
-			BaseCurrencyContract:  symbolInfo.Base.Contract,
-			QuoteCurrencyContract: symbolInfo.Quote.Contract,
+			BaseCurrencyContract:  symbolInfo.Base.AtomexContract,
+			QuoteCurrencyContract: symbolInfo.Quote.AtomexContract,
 			SecretHash:            scrt.Hash,
 			ReceivingAddress:      receiver.Address,
 			RefundAddress:         receiver.Address,
@@ -171,7 +196,7 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote, index int) error {
 	}
 
 	order := requestToOrder(request, scrt)
-	mm.orders.Store(clientOrderID, &order)
+	mm.orders.Store(clientID, &order)
 	return nil
 }
 
@@ -230,6 +255,11 @@ func (mm *MarketMaker) findDuplicatesOrders(orders []atomex.Order) error {
 func (mm *MarketMaker) cancelAll() (cancelErr error) {
 
 	mm.orders.Range(func(cid clientOrderID, order *Order) bool {
+		mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("cancelling...")
+		if order.ID == 0 {
+			return true
+		}
+
 		if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
 			ID:     order.ID,
 			Side:   order.Side,
@@ -238,6 +268,7 @@ func (mm *MarketMaker) cancelAll() (cancelErr error) {
 			cancelErr = err
 			return false
 		}
+		mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("cancelled")
 		return true
 	})
 

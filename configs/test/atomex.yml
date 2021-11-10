@@ -9,8 +9,11 @@ to_symbols:
   WBTC_tzBTC: WBTC/tzBTC
   XTZ_USDT: XTZ/USDT
   KUSD_USDT: KUSD/USDT
+  XTZ_ETH: XTZ/ETH
 
 from_symbols:
   WBTC/tzBTC: WBTC_tzBTC
   XTZ/USDT: XTZ_USDT
   KUSD/USDT: KUSD_USDT
+  XTZ/ETH: XTZ_ETH
+  

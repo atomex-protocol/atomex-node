@@ -131,6 +131,11 @@ func (rest *Rest) Auth(ctx context.Context, keys *signers.Key) error {
 	return nil
 }
 
+// GetToken -
+func (rest *Rest) GetToken() string {
+	return rest.token
+}
+
 // TopOfBookQuotes -
 func (rest *Rest) TopOfBookQuotes(ctx context.Context, symbols ...string) (response []TopOfBook, err error) {
 	args := make(url.Values)

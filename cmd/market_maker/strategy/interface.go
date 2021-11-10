@@ -15,14 +15,14 @@ type Strategy interface {
 func New(cfg Config) (Strategy, error) {
 	switch cfg.Kind {
 	case KindFollow:
-		return NewFollow(cfg.Spread), nil
+		return NewFollow(cfg), nil
 	case KindOneByOne:
 		return NewOneByOne(cfg), nil
 	case KindVolatility:
 		if cfg.Window < 1 {
 			return nil, errors.Wrapf(ErrInvalidArg, "window=%d", cfg.Window)
 		}
-		return NewVolatility(cfg.Window), nil
+		return NewVolatility(cfg), nil
 	default:
 		return nil, errors.Wrap(ErrUnknownStrategy, string(cfg.Kind))
 	}
@@ -87,4 +87,9 @@ type Config struct {
 	Spread     Spread          `yaml:"spread"`
 	Volume     decimal.Decimal `yaml:"volume"`
 	Window     int             `yaml:"window"`
+	Dist       struct {
+		Min decimal.Decimal `yaml:"min"`
+		Max decimal.Decimal `yaml:"max"`
+	} `yaml:"dist"`
+	Width decimal.Decimal `yaml:"width"`
 }

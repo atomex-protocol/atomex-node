@@ -30,6 +30,7 @@ type Websocket struct {
 	errorChan chan error
 	msgs      chan Message
 	stop      chan struct{}
+	stopped   bool
 	wg        sync.WaitGroup
 
 	// test bool
@@ -121,6 +122,7 @@ func (ws *Websocket) Connect(token TokenResponse) error {
 // Close -
 func (ws *Websocket) Close() error {
 	ws.stop <- struct{}{} // for listen
+	ws.stopped = true
 	return ws.close()
 }
 
@@ -153,7 +155,7 @@ func (ws *Websocket) Listen() <-chan Message {
 func (ws *Websocket) ping() {
 	defer ws.wg.Done()
 
-	keepAliveTicker := time.NewTicker(time.Second * 15)
+	keepAliveTicker := time.NewTicker(time.Second * 10)
 	defer keepAliveTicker.Stop()
 
 	for {
@@ -184,6 +186,8 @@ func (ws *Websocket) listen() {
 		default:
 			if err := ws.readAllMessages(); err != nil {
 				switch {
+				case ws.stopped:
+					return
 				case errors.Is(err, ErrTimeout) || websocket.IsCloseError(err, websocket.CloseAbnormalClosure):
 					if err := ws.reconnect(); err != nil {
 						ws.logger.Err(err).Msg("reconnect")
@@ -220,6 +224,7 @@ func (ws *Websocket) reconnect() error {
 		return errors.Wrap(err, "reconnect Dial")
 	}
 	ws.conn = c
+	ws.logger.Warn().Msg("reconnected")
 	return nil
 }
 

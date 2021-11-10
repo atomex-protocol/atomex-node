@@ -1,6 +1,10 @@
 package indicators
 
-import "github.com/shopspring/decimal"
+import (
+	"math"
+
+	"github.com/shopspring/decimal"
+)
 
 // StandardDeviation -
 type StandardDeviation struct {
@@ -35,12 +39,14 @@ func (sd *StandardDeviation) Value() decimal.Decimal {
 	mean := sd.Mean()
 	value := decimal.Zero
 	for i := range sd.values {
-		degree := sd.values[i].Sub(mean).Pow(decimal.NewFromInt32(2))
-		value = value.Add(degree)
+		diff := sd.values[i].Sub(mean)
+		value = value.Add(diff.Pow(decimal.NewFromInt(2)))
 	}
 
 	count := decimal.NewFromInt32(int32(len(sd.values)))
-	return value.Div(count).Pow(decimal.NewFromFloat(0.5))
+	variance := value.Div(count)
+	fVariance, _ := variance.Float64()
+	return decimal.NewFromFloat(math.Sqrt(fVariance))
 }
 
 // Mean -

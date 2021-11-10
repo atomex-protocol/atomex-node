@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
+	"github.com/atomex-protocol/watch_tower/cmd/market_maker/synthetic"
 	"github.com/atomex-protocol/watch_tower/internal/atomex"
 	"github.com/atomex-protocol/watch_tower/internal/atomex/signers"
 	"github.com/atomex-protocol/watch_tower/internal/chain"
@@ -35,6 +36,10 @@ type MarketMaker struct {
 	keys              Keys
 	atomexMeta        config.Atomex
 	quoteProviderMeta QuoteProviderMeta
+	tickers           map[string]exchange.Ticker
+	synthetics        map[string]synthetic.Synthetic
+
+	ordersCounter uint64
 
 	orders *OrdersMap
 	swaps  *SwapsMap
@@ -91,7 +96,15 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 				break
 			}
 		}
+	}
 
+	synthetics := make(map[string]synthetic.Synthetic)
+	for symbol, cfg := range cfg.QuoteProvider.Meta.FromSymbols {
+		synth, err := synthetic.New(symbol, cfg)
+		if err != nil {
+			return nil, err
+		}
+		synthetics[symbol] = synth
 	}
 
 	return &MarketMaker{
@@ -105,11 +118,13 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		tracker:           track,
 		strategies:        strategies,
 		symbols:           symbols,
+		synthetics:        synthetics,
 		keys:              cfg.Keys,
 		atomexMeta:        cfg.Atomex,
 		quoteProviderMeta: cfg.QuoteProvider.Meta,
 		orders:            NewOrdersMap(),
 		swaps:             NewSwapsMap(),
+		tickers:           make(map[string]exchange.Ticker),
 		stop:              make(chan struct{}, 3),
 	}, nil
 }
@@ -135,13 +150,7 @@ func (mm *MarketMaker) loadKeys() (*signers.Key, error) {
 // Start -
 func (mm *MarketMaker) Start(ctx context.Context) error {
 	mm.wg.Add(1)
-	go mm.listenTracker()
-
-	mm.wg.Add(1)
 	go mm.listenAtomex()
-
-	mm.wg.Add(1)
-	go mm.listenProvider()
 
 	loadedKeys, err := mm.loadKeys()
 	if err != nil {
@@ -151,19 +160,38 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	token, err := mm.atomexAPI.Token(ctxTimeout, loadedKeys)
-	if err != nil {
+	if err := mm.atomexAPI.Auth(ctxTimeout, loadedKeys); err != nil {
 		return errors.Wrap(err, "Token")
 	}
 
-	if err := mm.atomex.Connect(token); err != nil {
+	if err := mm.atomex.Connect(atomex.TokenResponse{
+		Token: mm.atomexAPI.GetToken(),
+	}); err != nil {
 		return errors.Wrap(err, "atomex.Connect")
 	}
+
+	if err := mm.initialize(ctx); err != nil {
+		return errors.Wrap(err, "initialize")
+	}
+
+	// init tracker
+
+	mm.wg.Add(1)
+	go mm.listenTracker()
+
+	if err := mm.tracker.Start(); err != nil {
+		return errors.Wrap(err, "tracker.Start")
+	}
+
+	// init quote provider
+
+	mm.wg.Add(1)
+	go mm.listenProvider()
 
 	providerSymbols := make([]string, 0)
 	for symbol := range mm.symbols {
 		if s, ok := mm.quoteProviderMeta.FromSymbols[symbol]; ok {
-			providerSymbols = append(providerSymbols, s)
+			providerSymbols = append(providerSymbols, s.Symbols...)
 		}
 	}
 	if len(providerSymbols) > 0 {
@@ -172,11 +200,7 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 		}
 	}
 
-	if err := mm.tracker.Start(); err != nil {
-		return errors.Wrap(err, "tracker.Start")
-	}
-
-	return mm.initialize(ctx)
+	return nil
 }
 
 // Close -
@@ -190,7 +214,7 @@ func (mm *MarketMaker) Close() error {
 		return err
 	}
 
-	if err := mm.cancelAll(); err != nil {
+	if err := mm.cancelAll(); err != nil { // TODO: wait until all orders will be cancelled
 		return err
 	}
 	if err := mm.atomex.Close(); err != nil {
@@ -231,7 +255,6 @@ func (mm *MarketMaker) getSenderWallet(symbol types.Symbol, side strategy.Side) 
 const limitForAtomexRequest = 100
 
 func (mm *MarketMaker) initialize(ctx context.Context) error {
-
 	if err := mm.initializeOrders(ctx); err != nil {
 		return errors.Wrap(err, "initializeOrders")
 	}

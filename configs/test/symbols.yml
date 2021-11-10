@@ -7,3 +7,6 @@
 - name: KUSD_USDT
   base: KUSD_tez
   quote: USDT
+- name: XTZ_ETH
+  base: XTZ
+  quote: ETH

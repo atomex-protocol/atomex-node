@@ -8,15 +8,22 @@ import (
 // Follow -
 type Follow struct {
 	spread Spread
+	symbol string
 }
 
 // NewFollow -
-func NewFollow(spread Spread) *Follow {
-	return &Follow{spread}
+func NewFollow(cfg Config) *Follow {
+	return &Follow{cfg.Spread, cfg.SymbolName}
 }
 
 // Quotes -
 func (s *Follow) Quotes(args *Args) ([]Quote, error) {
+	if args == nil {
+		return nil, errors.Wrapf(ErrInvalidArg, "nil")
+	}
+	if args.symbol != s.symbol {
+		return nil, nil
+	}
 	if !args.bid.IsPositive() {
 		return nil, errors.Wrapf(ErrInvalidArg, "bid=%v", args.bid)
 	}

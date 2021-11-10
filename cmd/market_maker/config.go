@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
+	"github.com/atomex-protocol/watch_tower/cmd/market_maker/synthetic"
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
 	"github.com/atomex-protocol/watch_tower/internal/config"
 	"github.com/atomex-protocol/watch_tower/internal/keys"
@@ -36,8 +37,8 @@ const (
 
 // QuoteProviderMeta -
 type QuoteProviderMeta struct {
-	FromSymbols map[string]string `yaml:"from_symbols"`
-	ToSymbols   map[string]string `yaml:"to_symbols"`
+	FromSymbols map[string]synthetic.Config `yaml:"from_symbols"`
+	ToSymbols   map[string]string           `yaml:"to_symbols"`
 }
 
 // Keys -
