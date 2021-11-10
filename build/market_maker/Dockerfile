@@ -6,8 +6,7 @@ FROM golang:1.16-alpine as builder
 ENV CGO_ENABLED=0
 ENV GO111MODULE=on
 ENV GOOS=linux
-ENV ATOMEX_PROTOCOL_ENV=production
-ARG config_file
+ENV AP_ENV=production
 
 RUN apk --no-cache add ca-certificates
 RUN apk add --update git
@@ -31,13 +30,11 @@ FROM scratch
 
 WORKDIR /app/market_maker
 ENV GOPATH=$GOPATH
-ENV ATOMEX_PROTOCOL_ENV=$ATOMEX_PROTOCOL_ENV
-ARG config_file
+ENV AP_ENV=${AP_ENV}
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /go/bin/market_maker /go/bin/market_maker
-COPY cmd/market_maker/$config_file config.yml
 COPY assets/abi/ abi/
-COPY configs/${ATOMEX_PROTOCOL_ENV} configs/
+COPY configs/${AP_ENV} configs/
 
 ENTRYPOINT ["/go/bin/market_maker"]

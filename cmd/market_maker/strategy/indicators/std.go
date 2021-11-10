@@ -22,7 +22,7 @@ func NewStandardDeviation(window int) *StandardDeviation {
 
 // Full -
 func (sd *StandardDeviation) Full() bool {
-	return len(sd.values) == cap(sd.values)
+	return len(sd.values) == int(sd.window)
 }
 
 // Add -

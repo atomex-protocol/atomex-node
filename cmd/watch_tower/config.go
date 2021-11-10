@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
+	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/pkg/errors"
 )
 
@@ -11,7 +12,8 @@ type Config struct {
 	Types                []string `yaml:"types"`
 	RetryCountOnFailedTx uint     `yaml:"retry_count_on_failed_tx"`
 
-	Chains tools.Config `yaml:"-"`
+	Chains tools.Config           `yaml:"-"`
+	Assets map[string]types.Asset `yaml:"-"`
 }
 
 // Validate -

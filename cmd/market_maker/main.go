@@ -18,25 +18,15 @@ import (
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
 
-	var configName string
-	flag.StringVar(&configName, "c", "config.yml", "path to YAML config file")
+	var configDir string
+	flag.StringVar(&configDir, "c", "configs", "path to directory containing configs")
 
 	flag.Parse()
 
 	var cfg Config
+	configName := path.Join(configDir, "market_maker.yml")
 	if err := config.Load(configName, &cfg); err != nil {
 		log.Panic().Err(err).Str("file", configName).Msg("config.Load")
-	}
-
-	var configDir string
-	env := os.Getenv("ATOMEX_PROTOCOL_ENV")
-	switch env {
-	case "production":
-		configDir = "./configs"
-	case "test":
-		configDir = "../../configs/test"
-	default:
-		log.Panic().Str("env", env).Msg("invalid environment")
 	}
 
 	info, err := config.LoadMetaInfo(path.Join(configDir, "assets.yml"), path.Join(configDir, "symbols.yml"))
@@ -51,6 +41,13 @@ func main() {
 
 	if err := config.Load(path.Join(configDir, "chains.yml"), &cfg.Chains); err != nil {
 		log.Panic().Err(err).Str("file", path.Join(configDir, "chains.yml")).Msg("config.Load")
+	}
+
+	if err := cfg.Chains.Ethereum.FillContractAddresses(cfg.Info.Assets); err != nil {
+		log.Panic().Err(err).Msg("FillContractAddresses")
+	}
+	if err := cfg.Chains.Tezos.FillContractAddresses(cfg.Info.Assets); err != nil {
+		log.Panic().Err(err).Msg("FillContractAddresses")
 	}
 
 	if err := cfg.Chains.Ethereum.Validate(); err != nil {

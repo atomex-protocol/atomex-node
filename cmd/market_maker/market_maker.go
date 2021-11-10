@@ -41,8 +41,9 @@ type MarketMaker struct {
 
 	ordersCounter uint64
 
-	orders *OrdersMap
-	swaps  *SwapsMap
+	orders     *OrdersMap
+	swaps      *SwapsMap
+	operations map[tools.OperationID]chain.Operation
 
 	wg   sync.WaitGroup
 	stop chan struct{}
@@ -125,6 +126,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		orders:            NewOrdersMap(),
 		swaps:             NewSwapsMap(),
 		tickers:           make(map[string]exchange.Ticker),
+		operations:        make(map[tools.OperationID]chain.Operation),
 		stop:              make(chan struct{}, 3),
 	}, nil
 }

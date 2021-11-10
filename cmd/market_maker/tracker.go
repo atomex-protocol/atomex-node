@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
+	"github.com/pkg/errors"
 )
 
 func (mm *MarketMaker) listenTracker() {
@@ -14,14 +15,8 @@ func (mm *MarketMaker) listenTracker() {
 			return
 
 		case operation := <-mm.tracker.Operations():
-			mm.log.Info().Str("hash", operation.Hash).Str("chain", operation.ChainType.String()).Str("status", operation.Status.String()).Msg("operation's status changed")
-
-			switch operation.Status {
-			case chain.Applied, chain.Pending: // do not handle. it's handled below in `StatusChanged`
-			case chain.Failed:
-				// TODO: think about re-send reasons
-			default:
-				mm.log.Warn().Msgf("unknown operation status: %s", operation.Status.String())
+			if err := mm.handleOperationFromChain(operation); err != nil {
+				mm.log.Err(err).Msg("handleOperationFromChain")
 			}
 
 		case swap := <-mm.tracker.StatusChanged():
@@ -56,4 +51,34 @@ func (mm *MarketMaker) listenTracker() {
 
 		}
 	}
+}
+
+func (mm *MarketMaker) handleOperationFromChain(operation chain.Operation) error {
+	mm.log.Info().Str("hash", operation.Hash).Str("chain", operation.ChainType.String()).Str("status", operation.Status.String()).Msg("operation's status changed")
+	id := tools.OperationID{
+		Hash:  operation.Hash,
+		Chain: operation.ChainType,
+	}
+
+	switch operation.Status {
+	case chain.Pending:
+		mm.operations[id] = operation
+		mm.log.Info().Str("blockchain", operation.ChainType.String()).Str("hash", operation.Hash).Str("status", operation.Status.String()).Str("hashed_secret", operation.HashedSecret.String()).Msg("transaction")
+
+	case chain.Applied:
+		if old, ok := mm.operations[id]; ok {
+			mm.log.Info().Str("blockchain", operation.ChainType.String()).Str("hash", operation.Hash).Str("status", operation.Status.String()).Str("hashed_secret", old.HashedSecret.String()).Msg("transaction")
+			delete(mm.operations, id)
+		}
+	case chain.Failed:
+		if old, ok := mm.operations[id]; ok {
+			mm.log.Info().Str("blockchain", operation.ChainType.String()).Str("hash", operation.Hash).Str("status", operation.Status.String()).Str("hashed_secret", old.HashedSecret.String()).Msg("transaction")
+			delete(mm.operations, id)
+
+			// TODO: resend here if needed
+		}
+	default:
+		return errors.Errorf("unknown operation status: %s", operation.Status.String())
+	}
+	return nil
 }

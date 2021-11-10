@@ -23,7 +23,7 @@ func NewMovingAverage(window int) *MovingAverage {
 
 // Full -
 func (ma *MovingAverage) Full() bool {
-	return len(ma.values) == cap(ma.values)
+	return len(ma.values) == ma.window
 }
 
 // Add -

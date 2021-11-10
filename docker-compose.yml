@@ -7,8 +7,15 @@ services:
         dockerfile: build/watch_tower/Dockerfile
         context: .
         env:
-          ATOMEX_PROTOCOL_ENV=production
-        args:
-          - config_file=config.yml
+          AP_ENV=production
+    restart: always
+    env_file: .env
+  market_maker:
+    image: atomex-protocol/market_maker:${TAG:-latest}
+    build:
+        dockerfile: build/market_maker/Dockerfile
+        context: .
+        env:
+          AP_ENV=production
     restart: always
     env_file: .env

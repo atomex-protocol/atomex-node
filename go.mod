@@ -23,6 +23,7 @@ require (
 	github.com/shirou/gopsutil v3.21.8+incompatible // indirect
 	github.com/shopspring/decimal v1.2.0
 	github.com/sirupsen/logrus v1.8.1 // indirect
+	github.com/stretchr/testify v1.7.0
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/valyala/fastjson v1.6.3 // indirect

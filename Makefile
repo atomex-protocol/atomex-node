@@ -7,9 +7,8 @@ tower:
 tower-test:
 	cd cmd/watch_tower && go run . -c config.test.yml
 
-
 market-maker:
-	cd cmd/market_maker && go run . -c config.test.yml
+	cd cmd/market_maker && go run . -c ../../configs/test
 
 test:
 	go test ./...
