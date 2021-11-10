@@ -155,7 +155,7 @@ func (ws *Websocket) Listen() <-chan Message {
 func (ws *Websocket) ping() {
 	defer ws.wg.Done()
 
-	keepAliveTicker := time.NewTicker(time.Second * 10)
+	keepAliveTicker := time.NewTicker(time.Second * 8)
 	defer keepAliveTicker.Stop()
 
 	for {
@@ -229,7 +229,7 @@ func (ws *Websocket) reconnect() error {
 }
 
 func (ws *Websocket) readAllMessages() error {
-	if err := ws.conn.SetReadDeadline(time.Now().Add(time.Second * 20)); err != nil {
+	if err := ws.conn.SetReadDeadline(time.Now().Add(time.Second * 12)); err != nil {
 		return errors.Wrap(err, "SetReadDeadline")
 	}
 

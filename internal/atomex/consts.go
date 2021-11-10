@@ -28,8 +28,9 @@ const (
 type Side string
 
 const (
-	SideBuy  Side = "Buy"
-	SideSell Side = "Sell"
+	SideBuy   Side = "Buy"
+	SideSell  Side = "Sell"
+	SideEmpty Side = ""
 )
 
 // OrderStatus -

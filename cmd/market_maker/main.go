@@ -92,7 +92,7 @@ func main() {
 
 	<-signals
 
-	if err := marketMaker.Close(); err != nil {
+	if err := marketMaker.Close(ctx); err != nil {
 		log.Panic().Err(err).Msg("marketMaker.Close")
 	}
 	close(signals)

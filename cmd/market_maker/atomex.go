@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
@@ -252,7 +253,7 @@ func (mm *MarketMaker) findDuplicatesOrders(orders []atomex.Order) error {
 	return nil
 }
 
-func (mm *MarketMaker) cancelAll() (cancelErr error) {
+func (mm *MarketMaker) cancelAll(ctx context.Context) (cancelErr error) {
 
 	mm.orders.Range(func(cid clientOrderID, order *Order) bool {
 		mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("cancelling...")
@@ -260,15 +261,29 @@ func (mm *MarketMaker) cancelAll() (cancelErr error) {
 			return true
 		}
 
-		if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
-			ID:     order.ID,
-			Side:   order.Side,
-			Symbol: order.Symbol,
-		}); err != nil {
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+
+		response, err := mm.atomexAPI.CancelOrder(cancelCtx, order.ID, order.Symbol, order.Side)
+		if err != nil {
 			cancelErr = err
 			return false
 		}
-		mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("cancelled")
+
+		if response.Result {
+			mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("cancelled")
+
+			var cid clientOrderID
+			if err := cid.parse(order.ClientID); err != nil {
+				cancelErr = err
+				return false
+			}
+
+			mm.orders.Delete(cid)
+
+		} else {
+			mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("not cancelled")
+		}
 		return true
 	})
 

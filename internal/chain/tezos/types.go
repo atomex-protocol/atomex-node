@@ -7,7 +7,7 @@ type blockIDHead struct {
 }
 
 // ID -
-func (b *blockIDHead) ID() string {
+func (b blockIDHead) ID() string {
 	if b.prev != "" {
 		return fmt.Sprintf("head~%s", b.prev)
 	}

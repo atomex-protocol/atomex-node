@@ -180,12 +180,20 @@ func (rest *Rest) Order(ctx context.Context, id int64) (response Order, err erro
 }
 
 // CancelOrder -
-func (rest *Rest) CancelOrder(ctx context.Context, id int64) (response DefaultResponse, err error) {
+func (rest *Rest) CancelOrder(ctx context.Context, id int64, symbol string, side Side) (response DefaultResponse, err error) {
 	if id < 1 {
 		return response, errors.Errorf("invalid order id: %d", id)
 	}
+
+	args := make(url.Values)
+	if symbol != "" {
+		args.Add("symbol", symbol)
+	}
+	if side != SideEmpty {
+		args.Add("side", string(side))
+	}
 	urlPath := fmt.Sprintf("Orders/%d", id)
-	err = rest.request(ctx, http.MethodDelete, urlPath, nil, nil, &response)
+	err = rest.request(ctx, http.MethodDelete, urlPath, args, nil, &response)
 	return
 }
 

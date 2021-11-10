@@ -204,7 +204,7 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 }
 
 // Close -
-func (mm *MarketMaker) Close() error {
+func (mm *MarketMaker) Close(ctx context.Context) error {
 	for i := 0; i < cap(mm.stop); i++ {
 		mm.stop <- struct{}{}
 	}
@@ -214,7 +214,7 @@ func (mm *MarketMaker) Close() error {
 		return err
 	}
 
-	if err := mm.cancelAll(); err != nil { // TODO: wait until all orders will be cancelled
+	if err := mm.cancelAll(ctx); err != nil {
 		return err
 	}
 	if err := mm.atomex.Close(); err != nil {

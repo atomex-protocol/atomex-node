@@ -33,6 +33,7 @@ type Tezos struct {
 	bigMaps    []api.BigMap
 	counter    int64
 	chainID    string
+	ttl        string
 	minPayoff  decimal.Decimal
 
 	log zerolog.Logger
@@ -52,6 +53,7 @@ type Config struct {
 	Contract  string
 	Tokens    []string
 	LogLevel  zerolog.Level
+	TTL       int64
 }
 
 // New -
@@ -75,12 +77,17 @@ func New(cfg Config) (*Tezos, error) {
 		return nil, err
 	}
 
+	if cfg.TTL < 1 {
+		cfg.TTL = 5
+	}
+
 	tez := &Tezos{
 		cfg:        cfg,
 		rpc:        client,
 		key:        key,
 		api:        api.New(cfg.TzKT),
 		eventsTzKT: events.NewTzKT(fmt.Sprintf("%s/v1/events", cfg.TzKT)),
+		ttl:        fmt.Sprintf("%d", cfg.TTL),
 		log:        logger.New(logger.WithLogLevel(cfg.LogLevel), logger.WithModuleName("tezos")),
 		events:     make(chan chain.Event, 1024*16),
 		operations: make(chan chain.Operation, 1024),
@@ -303,7 +310,7 @@ func (t *Tezos) Initiate(args chain.InitiateArgs) error {
 		return nil
 	}
 
-	opHash, err := t.sendTransaction(args.Contract, amount, "50000", "22000", "initiate", json.RawMessage(value))
+	opHash, err := t.sendTransaction(args.Contract, amount, "initiate", json.RawMessage(value))
 	if err != nil {
 		return err
 	}
@@ -328,7 +335,7 @@ func (t *Tezos) Redeem(hashedSecret, secret chain.Hex, contract string) error {
 		return err
 	}
 
-	opHash, err := t.sendTransaction(contract, "0", "50000", "22000", "redeem", json.RawMessage(value))
+	opHash, err := t.sendTransaction(contract, "0", "redeem", json.RawMessage(value))
 	if err != nil {
 		return err
 	}
@@ -352,7 +359,7 @@ func (t *Tezos) Refund(hashedSecret chain.Hex, contract string) error {
 		return err
 	}
 
-	opHash, err := t.sendTransaction(contract, "0", "50000", "22000", "refund", json.RawMessage(value))
+	opHash, err := t.sendTransaction(contract, "0", "refund", json.RawMessage(value))
 	if err != nil {
 		return err
 	}
@@ -772,41 +779,89 @@ func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
 	return nil
 }
 
-func (t *Tezos) sendTransaction(destination, amount, fee, gasLimit, entrypoint string, value json.RawMessage) (string, error) {
+var (
+	minimalFees              = decimal.RequireFromString("0.0001")
+	minimalNanotezPerByte    = decimal.RequireFromString("0.000001")
+	minimalNanotezPerGasUnit = decimal.RequireFromString("0.0000001")
+	tezosMultiplier          = decimal.RequireFromString("1000000")
+)
+
+func (t *Tezos) sendTransaction(destination, amount, entrypoint string, value json.RawMessage) (string, error) {
 	atomic.AddInt64(&t.counter, 1)
 
 	transaction := rpc.Transaction{
-		Kind:         rpc.TRANSACTION,
-		Source:       t.key.PubKey.GetAddress(),
-		Fee:          fee,
-		GasLimit:     gasLimit,
-		StorageLimit: "257",
-		Counter:      strconv.Itoa(int(t.counter)),
-		Amount:       amount,
-		Destination:  destination,
+		Kind:        rpc.TRANSACTION,
+		Source:      t.key.PubKey.GetAddress(),
+		Counter:     strconv.Itoa(int(t.counter)),
+		Amount:      amount,
+		Destination: destination,
 		Parameters: &rpc.Parameters{
 			Entrypoint: entrypoint,
 			Value:      &value,
 		},
 	}
 
-	_, block, err := t.rpc.Block(&blockIDHead{"60"})
+	blockID := blockIDHead{t.ttl}
+	_, block, err := t.rpc.Block(blockID)
 	if err != nil {
 		return "", err
 	}
 
-	op, err := forge.Encode(block.Hash, transaction.ToContent())
+	preApplyOperation, err := forge.Encode(block.Hash, transaction.ToContent())
 	if err != nil {
 		return "", err
 	}
 
-	signature, err := t.key.SignHex(op)
+	signature, err := t.key.SignHex(preApplyOperation)
+	if err != nil {
+		return "", err
+	}
+
+	_, operations, err := t.rpc.PreapplyOperations(rpc.PreapplyOperationsInput{
+		BlockID: blockID,
+		Operations: []rpc.Operations{
+			{
+				Protocol: block.Protocol,
+				ChainID:  t.chainID,
+				Branch:   block.Hash,
+				Contents: rpc.Contents{
+					transaction.ToContent(),
+				},
+				Signature: signature.ToBase58(),
+			},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(operations) == 0 || len(operations[0].Contents) == 0 {
+		return "", errors.New("empty operations array after preapply")
+	}
+
+	tx := operations[0].Contents[0].ToTransaction()
+	size := decimal.RequireFromString(tx.Metadata.OperationResult.StorageSize)
+	gas := decimal.RequireFromString(tx.Metadata.OperationResult.ConsumedGas)
+
+	sizeFees := minimalNanotezPerByte.Mul(size).Round(6)
+	gasUnitFees := minimalNanotezPerGasUnit.Mul(gas).Round(6)
+
+	transaction.GasLimit = operations[0].Contents[0].GasLimit
+	transaction.StorageLimit = operations[0].Contents[0].StorageLimit
+	transaction.Fee = minimalFees.Add(sizeFees).Add(gasUnitFees).Mul(tezosMultiplier).Round(0).String()
+
+	operation, err := forge.Encode(block.Hash, transaction.ToContent())
+	if err != nil {
+		return "", err
+	}
+
+	resultingSignature, err := t.key.SignHex(operation)
 	if err != nil {
 		return "", err
 	}
 
 	_, opHash, err := t.rpc.InjectionOperation(rpc.InjectionOperationInput{
-		Operation: signature.AppendToHex(op),
+		Operation: resultingSignature.AppendToHex(operation),
 		ChainID:   t.chainID,
 	})
 

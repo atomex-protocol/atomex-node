@@ -19,6 +19,7 @@ type Tezos struct {
 	TzKT      string   `yaml:"tzkt"`
 	Tokens    []string `yaml:"tokens"`
 	Contract  string   `yaml:"contract"`
+	TTL       int64    `yaml:"ttl"`
 }
 
 // Validate -
@@ -37,6 +38,9 @@ func (t *Tezos) Validate() error {
 	}
 	if t.MinPayOff == "" {
 		t.MinPayOff = "0"
+	}
+	if t.TTL == 0 {
+		t.TTL = 5
 	}
 	return nil
 }

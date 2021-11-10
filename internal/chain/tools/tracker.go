@@ -38,6 +38,7 @@ func NewTracker(cfg Config, opts ...TrackerOption) (*Tracker, error) {
 		Contract:  cfg.Tezos.Contract,
 		Tokens:    cfg.Tezos.Tokens,
 		MinPayOff: cfg.Tezos.MinPayOff,
+		TTL:       cfg.Tezos.TTL,
 	})
 	if err != nil {
 		return nil, err
