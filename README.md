@@ -1,94 +1,296 @@
-# Watch Tower
+# Atomex Protocol Node
+
 [![Build Status](https://github.com/atomex-protocol/watch-tower/workflows/CI/badge.svg)](https://github.com/atomex-protocol/watch-tower/actions?query=branch%3Amaster+workflow%3A%22build%22)
 [![made_with golang](https://img.shields.io/badge/made_with-golang-blue.svg)](https://golang.org/)
 
-Watch tower is atomex module which sends client's redeem  or refund transactions.
+It's a project which contains Golang realization of modules of atomex protocol:
 
-## Usage
-
-To run watch tower you should execute command
-
-```bash
-watch_tower -c config.yml
-```
-
-Watch tower has 1 argument:
-
-* `c` - config file name.
-
-
-## Private keys
-
-To set private keys you should pass environment variables to docker container or set it on OS. `ETHEREUM_PRIVATE` - for ethereum wallet and `TEZOS_PRIVATE` - for tezos wallet.
-By default `.env` file is expected in docker-compose.
-
+* watch tower
+* market maker
 
 ## Build
 
-You can build binary from source
+You can build binaries from source
 
 ```bash
-cd cmd/watch_tower && go build .
+cd cmd/watch_tower && go run . -c ../../configs/production
+
+cd cmd/market_maker && go run . -c ../../configs/production
 ```
 
 or by docker
 
 ```bash
-docker-compose up -d --build watch_tower
+docker-compose up -d --build watch_tower market_maker
 
 # or
 
 make up
 ```
 
-## Config
+## Usage
 
-Example:
+### Watch tower
+
+To run watch tower you should execute command
+
+```bash
+watch_tower -c configs
+```
+
+Watch tower has 1 argument:
+
+* `c` - path to directory which contains configuration files. Default: `configs`.
+
+
+### Market Maker
+
+To run market maker you should execute command
+
+```bash
+market_maker -c configs
+```
+
+Market maker has 1 argument:
+
+* `c` - path to directory which contains configuration files. Default: `configs`.
+
+## Configuration
+
+All configuration files are YAML files which located in configuration directory. Default configuration directory is `./configs`. It's located in application folder. For example, you can find configuration directories [here](https://github.com/atomex-protocol/watch-tower/configs).
+
+Configuration directory contains following files:
+
+* `assets.yml` - file which contains using currencies
+* `atomex.yml` - atomex settings
+* `binance.yml` - binance settings
+* `chains.yml` - file which contains all supported chains settings
+* `market_maker.yml` - market maker settings
+* `symbols.yml` - file which contains instruments descriptions
+* `watch_tower.yml` - watch tower settings.
+
+You can find full description of configuration files below. **WARNING!** Don't use configs from examples. It may contains invalid contract addresses.
+
+### Assets
+
+In `assets.yml` you can add, remove or edit using currencies. File structure is:
+
+```yaml
+asset_id: # asset ID must be unique and it will be used in other configuration files
+    name: <asset name>
+    chain: <tezos or ethereum>
+    contract: <contract address of asset if exists>
+    atomex_contract: <atomex contract which interacted with asset>
+    decimals: <decimals count of asset>
+
+# =============================================================
+# For example
+# =============================================================
+
+USDT:
+  name: USDT
+  chain: ethereum
+  contract: 0xdac17f958d2ee523a2206206994597c13d831ec7
+  atomex_contract: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
+  decimals: 18
+XTZ:
+  name: XTZ
+  chain: tezos
+  atomex_contract: KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J
+  decimals: 6
+```
+
+### Symbols
+
+In `symbols.yml` you can add, remove or edit using traded instruments. It contains array of instruments. File structure is:
+
+```yaml
+- name: <symbol name which will be used in application and other configuration files>
+  base: <base asset ID from assets config>
+  quote: <quote asset ID from assets config>
+
+# =============================================================
+# For example
+# =============================================================
+
+- name: XTZ_USDT
+  base: XTZ
+  quote: USDT
+```
+
+### Chains
+
+In `chains.yml` you can edit supported chains settings. Now supported only `tezos` and `ethereum`. File structure is:
 
 ```yaml
 tezos:
+  node: <URL to tezos node RPC>
+  tzkt: <URL to TzKT API>
+  ttl: <Time-to-live of sent operations in blocks>
+
+ethereum:
+  node:  <URL to ethereum node RPC>
+  wss:  <URL to ethereum node websocket>
+
+# =============================================================
+# For example
+# =============================================================
+
+tezos:
   node: https://rpc.tzkt.io/mainnet
   tzkt: https://api.tzkt.io
-  contract: KT1VG2WtYdSWz5E7chTeAdDPZNy2MpP8pTfL
-  tokens:
-    - KT1EpQVwqLGSH7vMCWKJnq6Uxi851sEDbhWL
-    - KT1Ap287P1NzsnToSJdA4aqSNjPomRaHBZSr
+  ttl: 2
+
 ethereum:
   node: https://main-light.eth.linkpool.io/
   wss: wss://main-light.eth.linkpool.io/ws
-  eth_address: 0xE9C251cbB4881f9e056e40135E7d3EA9A7d037df
-  erc20_address: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
-  user_address: YOUR_WALLET_ADDRESS_HERE
+```
+
+### Atomex
+In `atomex.yml` you can edit base atomex settings. File structure is:
+
+```yaml
+rest_api: <URL to Atomex API>
+wss: <URL to Atomex Websocket>
+
+settings:
+  reward_for_redeem: <value of reward for redeem>
+  lock_time: <value of lock time>
+
+to_symbols:
+  <symbol ID from symbols config>: <symbol name in atomex>
+
+from_symbols:
+  <symbol name in atomex>: <symbol ID from symbols config>
+
+# =============================================================
+# For example
+# =============================================================
+
+rest_api: https://api.atomex.me/v1
+wss: wss://ws.api.atomex.me/ws
+
+settings:
+  reward_for_redeem: 1000
+  lock_time: 3600
+
+to_symbols:
+  XTZ_USDT: XTZ/USDT
+
+from_symbols:
+  XTZ/USDT: XTZ_USDT
+```
+
+### Third-party quote providers
+
+Market maker use third-party quote provider for sending limits to atomex. Now only Binance is supported. But list of supported providers can be extended. Each provider has own config in separate file. File is named like provider kind. For example: `binance.yml`.
+
+Symbol can be absent at quote provider. That's why synthetics concept is reailized. There are two synthetic types: direct and divided. Direct is an one-to-one synthetics. Divided is a synthetics which use third currency for exchange. For example, pair `XTZ_ETH` is not exists at Binance. You can realized it via combination of pairs `XTZ_USDT` and `ETH_USDT`. So, if you sell `XTZ` on `XTZ_ETH` at Atomex, you have to sell `XTZ_USDT` at Binance and buy `ETH` on `ETH_USDT`.
+
+#### Binance
+
+In `binance.yml` you can edit binance settings. File structure is:
+
+```yaml
+to_symbols:
+  <binance symbol name>: <symbol ID from symbols config>
+from_symbols:
+ <symbol ID from symbols config>:
+    type: <synthetic type (direct | divided)>
+    symbols: <array of binnace symbols>
+
+# =============================================================
+# For example
+# =============================================================
+
+to_symbols:
+  XTZUSDT: XTZ_USDT
+  ETHUSDT: ETH_USDT
+from_symbols:
+  XTZ_USDT:
+    type: direct
+    symbols:
+      - XTZUSDT
+  XTZ_ETH:
+    type: divided
+    symbols:
+      - XTZUSDT
+      - ETHUSDT
+```
+
+### Watch tower
+
+In `watch_tower.yml` you can edit watch tower settings. File structure is:
+
+```yaml
+restore: <flag which is set for finding passed swaps without redeem or refund (*false* by default)>
+types: <following for `redeem` or/and `refund` (both by default)>
+retry_count_on_failed_tx: <retry count if transaction sending was failed (*0* by default)>
+
+# =============================================================
+# For example
+# =============================================================
+
 restore: true
 types:
   - redeem
   - refund
+retry_count_on_failed_tx: 2
 ```
 
-* `types` - following for `redeem` or/and `refund` (both by default)
-* `restore` - flag which is set for finding passed swaps without redeem or refund (*false* by default)
-* `retry_count_on_failed_tx` - retry count if transaction sending was failed (*0* by default)
-* `tezos` - tezos settings. Consists of:
+### Market maker
 
-    * `node` - URL to tezos node RPC (**required**)
-    * `tzkt` - URL to TzKT API (**required**)
-    * `contract` - address of main Atomex contract in Tezos (**required**)
-    * `tokens` - list of Atomex addresses of token contracts (**required**)
-    * `min_payoff` - minimal pay off for processing in microtez (*0* by default.  Type: **string**)
+In `market_maker.yml` you can edit market maker settings. File structure is:
 
-* `ethereum` - ethereum settings. Consists of:
+```yaml
+quote_provider:
+  kind: <kind of quote provider. Only `binance`supported>
 
-    * `node` - URL to ethereum node RPC (**required**)
-    * `tzkt` - URL to ethereum websocket (**required**)
-    * `eth_address` - address of ETH Atomex contract in ethereum (**required**)
-    * `erc20_address` - address of ERC20 Atomex contract in ethereum (**required**)
-    * `user_address` - user wallet address (**required**)
-    * `min_payoff` - minimal pay off for processing in wei (*0* by default. Type: **string**)
+keys:
+  file: <file which contains key data>
+  kind: <kind of key file. Only `custom`supported>
+  generate_if_not_exists: <flag which is set for generating keys if not exists (*false* by default)>
 
+strategies:  # array of strategies
+  - kind: <volatility | follow | one-by-one>
+    symbol: <symbol ID from symbols config>
+    spread:
+      ask: <minimal half-spread for ask in percents>
+      bid: <minimal half-spread for bid in percents>
+    volume: <tradable volume>
+    dist:
+      min: <minimal offset for volatility strategy>
+      max: <maximum offset for volatility strategy>
+    width:  <count of standard deviation for volatility strategy>
+    window: <rolling window for volatility strategy>
 
-## Architecture
+log_level: trace
 
-  Logically program consists of 2 parts: blockchain listeners and watch tower.
-  Blockchain listeners get new transactions, prepare it and send events by channels.
-  Watch tower subscribes on blockchain listeners channels and processes its events.
-  After processing watch tower send to listener Redeem or Refund command.
+# =============================================================
+# For example
+# =============================================================
+
+quote_provider:
+  kind: binance
+
+keys:
+  file: api_test.json
+  kind: custom
+  generate_if_not_exists: true
+
+strategies:  
+  - kind: volatility
+    symbol: XTZ_ETH
+    spread:
+      ask: 0.03
+      bid: 0.05
+    volume: 0.01
+    dist:
+      min: 0.001
+      max: 0.006
+    width: 1.5
+    window: 60
+
+log_level: trace
+
+```

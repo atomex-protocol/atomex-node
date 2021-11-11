@@ -30,21 +30,21 @@ func (mm *MarketMaker) listenTracker() {
 
 			switch current.Status {
 			case tools.StatusInitiated:
-				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("swap is waiting redeem operation from watch tower")
-			case tools.StatusRedeemedOnce:
-				if current.Initiator.Status != tools.StatusRedeemed {
-					if err := mm.tracker.Redeem(*current, current.Initiator); err != nil {
-						mm.log.Err(err).Msg("tracker.Redeem")
-						continue
-					}
+				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("swap is initiated. redeeming...")
+
+				if err := mm.tracker.Redeem(*current, current.Initiator); err != nil {
+					mm.log.Err(err).Msg("tracker.Redeem")
+					continue
 				}
+
 			case tools.StatusRefundedOnce:
-				if current.Initiator.Status != tools.StatusRefunded {
-					if err := mm.tracker.Refund(*current, current.Initiator); err != nil {
-						mm.log.Err(err).Msg("tracker.Refund")
-						continue
-					}
+				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("counterparty refunded swap. refunding...")
+
+				if err := mm.tracker.Refund(*current, current.Initiator); err != nil {
+					mm.log.Err(err).Msg("tracker.Refund")
+					continue
 				}
+
 			case tools.StatusRefunded, tools.StatusRedeemed:
 				mm.swaps.Delete(current.HashedSecret)
 			}

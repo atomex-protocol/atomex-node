@@ -5,7 +5,7 @@ tower:
 	cd cmd/watch_tower && go run .
 
 tower-test:
-	cd cmd/watch_tower && go run . -c config.test.yml
+	cd cmd/watch_tower && go run . -c ../../configs/test
 
 market-maker:
 	cd cmd/market_maker && go run . -c ../../configs/test
@@ -17,4 +17,4 @@ lint:
 	golangci-lint run
 
 up:
-	docker-compose up -d --build watch_tower
+	docker-compose up -d --build watch_tower market_maker
