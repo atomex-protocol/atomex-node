@@ -55,6 +55,18 @@ Market maker has 1 argument:
 
 * `c` - path to directory which contains configuration files. Default: `configs`.
 
+### Environment variables
+
+* `AP_ENV` - atomex protocol environment.  Two values supported: `test` and `production`. If variable is not set configuration files will be searched in directory passed by argument.
+
+* `ETHEREUM_PRIVATE` - you can pass ethereum private key via the variable
+
+* `TEZOS_PRIVATE` - you can pass tezos private key via the variable
+
+### Docker Secrets
+
+You can pass private keys by Docker Secrets. You have to create docker secret `TEZOS_PRIVATE` or `ETHEREUM_PRIVATE` with private key.
+
 ## Configuration
 
 All configuration files are YAML files which located in configuration directory. Default configuration directory is `./configs`. It's located in application folder. For example, you can find configuration directories [here](https://github.com/atomex-protocol/watch-tower/configs).

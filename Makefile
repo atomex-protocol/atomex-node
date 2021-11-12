@@ -18,3 +18,6 @@ lint:
 
 up:
 	docker-compose up -d --build watch_tower market_maker
+
+down:
+	docker-compose down watch_tower market_maker

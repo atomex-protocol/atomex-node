@@ -23,6 +23,8 @@ func main() {
 
 	flag.Parse()
 
+	configDir = config.SelectEnvironment(configDir)
+
 	var cfg Config
 	configName := path.Join(configDir, "market_maker.yml")
 	if err := config.Load(configName, &cfg); err != nil {

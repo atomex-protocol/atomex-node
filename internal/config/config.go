@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path"
 
 	"gopkg.in/yaml.v2"
 )
@@ -16,4 +17,17 @@ func Load(filename string, output interface{}) (err error) {
 
 	err = yaml.NewDecoder(f).Decode(output)
 	return err
+}
+
+// SelectEnvironment -
+func SelectEnvironment(dir string) string {
+	env := os.Getenv("AP_ENV")
+	switch env {
+	case "production":
+		return path.Join(dir, "production")
+	case "test":
+		return path.Join(dir, "test")
+	default:
+		return dir
+	}
 }

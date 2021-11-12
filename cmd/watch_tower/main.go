@@ -19,6 +19,8 @@ func main() {
 
 	flag.Parse()
 
+	configDir = config.SelectEnvironment(configDir)
+
 	var cfg Config
 	configName := path.Join(configDir, "watch_tower.yml")
 	if err := config.Load(configName, &cfg); err != nil {
