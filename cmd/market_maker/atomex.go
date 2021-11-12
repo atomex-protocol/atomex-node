@@ -142,21 +142,30 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 	}
 
 	var cancelErr error
+	var notChanged bool
 	mm.orders.Range(func(cid clientOrderID, order *Order) bool {
 		if cid.kind == clientID.kind && cid.side == clientID.side && cid.symbol == clientID.symbol {
-			if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
-				ID:     order.ID,
-				Symbol: order.Symbol,
-				Side:   order.Side,
-			}); err != nil {
-				cancelErr = err
-				return false
+			if price != order.Price {
+				if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
+					ID:     order.ID,
+					Symbol: order.Symbol,
+					Side:   order.Side,
+				}); err != nil {
+					cancelErr = err
+				}
+			} else {
+				notChanged = true
 			}
+			return false
 		}
 		return true
 	})
 	if cancelErr != nil {
 		return errors.Wrap(cancelErr, "atomex.CancelOrder")
+	}
+
+	if notChanged {
+		return nil
 	}
 
 	receiver, err := mm.getReceiverWallet(symbolInfo, quote.Side)
@@ -316,9 +325,9 @@ func (mm *MarketMaker) handleAtomexSwapUpdate(swap atomex.Swap) error {
 	if err := mm.tracker.Initiate(chain.InitiateArgs{
 		HashedSecret: chain.Hex(swap.User.Requisites.SecretHash),
 		Participant:  swap.CounterParty.Requisites.ReceivingAddress,
-		Contract:     asset.Contract,
+		Contract:     asset.AtomexContract,
 		TokenAddress: asset.Contract,
-		Amount:       swap.Qty,
+		Amount:       amountToInt(swap.Qty, asset.Decimals),
 		PayOff:       payOff,
 		RefundTime:   refundTime,
 	}, asset.ChainType()); err != nil {

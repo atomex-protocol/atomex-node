@@ -276,7 +276,8 @@ strategies:  # array of strategies
     width:  <count of standard deviation for volatility strategy>
     window: <rolling window for volatility strategy>
 
-log_level: trace
+log_level: <log level. may be trace | debug | info | warn | error>
+restore: <flag which is set for finding active swaps (*false* by default)>
 
 # =============================================================
 # For example

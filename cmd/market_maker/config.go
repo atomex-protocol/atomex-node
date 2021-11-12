@@ -10,21 +10,22 @@ import (
 
 // Config -
 type Config struct {
-	QuoteProvider QuoteProvider     `yaml:"quote_provider"`
-	Strategies    []strategy.Config `yaml:"strategies"`
-	Keys          Keys              `yaml:"keys"`
+	QuoteProvider QuoteProvider     `yaml:"quote_provider" validate:"required"`
+	Strategies    []strategy.Config `yaml:"strategies" validate:"required"`
+	Keys          Keys              `yaml:"keys" validate:"required"`
 	LogLevel      string            `yaml:"log_level"`
+	Restore       bool              `yaml:"restore"`
 
-	Info   config.MetaInfo `yaml:"-"`
-	Atomex config.Atomex   `yaml:"-"`
-	Chains tools.Config    `yaml:"-"`
+	Info   config.MetaInfo `yaml:"-" validate:"-"`
+	Atomex config.Atomex   `yaml:"-" validate:"-"`
+	Chains tools.Config    `yaml:"-" validate:"-"`
 }
 
 // QuoteProvider -
 type QuoteProvider struct {
-	Kind QuoteProviderKind `yaml:"kind"`
+	Kind QuoteProviderKind `yaml:"kind" validate:"required"`
 
-	Meta QuoteProviderMeta `yaml:"-"`
+	Meta QuoteProviderMeta `yaml:"-" validate:"-"`
 }
 
 // QuoteProviderKind -
@@ -37,8 +38,8 @@ const (
 
 // QuoteProviderMeta -
 type QuoteProviderMeta struct {
-	FromSymbols map[string]synthetic.Config `yaml:"from_symbols"`
-	ToSymbols   map[string]string           `yaml:"to_symbols"`
+	FromSymbols map[string]synthetic.Config `yaml:"from_symbols" validate:"required"`
+	ToSymbols   map[string]string           `yaml:"to_symbols" validate:"required"`
 }
 
 // Keys -

@@ -3,7 +3,9 @@ package tools
 import (
 	"errors"
 
+	"github.com/atomex-protocol/watch_tower/internal/chain/tezos"
 	"github.com/atomex-protocol/watch_tower/internal/types"
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -12,18 +14,20 @@ const (
 
 // Config -
 type Config struct {
-	Tezos    Tezos    `yaml:"tezos"`
-	Ethereum Ethereum `yaml:"ethereum"`
+	Tezos    Tezos    `yaml:"tezos" validate:"required"`
+	Ethereum Ethereum `yaml:"ethereum" validate:"required"`
 }
 
 // Tezos -
 type Tezos struct {
-	MinPayOff string   `yaml:"min_payoff"`
-	Node      string   `yaml:"node"`
-	TzKT      string   `yaml:"tzkt"`
-	Tokens    []string `yaml:"tokens"`
-	Contract  string   `yaml:"contract"`
-	TTL       int64    `yaml:"ttl"`
+	MinPayOff string `yaml:"min_payoff"`
+	Node      string `yaml:"node" validate:"required,uri"`
+	TzKT      string `yaml:"tzkt" validate:"required,uri"`
+	TTL       int64  `yaml:"ttl"`
+
+	Tokens          []string                         `yaml:"-" validate:"-"`
+	Contract        string                           `yaml:"-" validate:"-"`
+	OperaitonParams tezos.OperationParamsByContracts `yaml:"-" validate:"-"`
 }
 
 // FillContractAddresses -
@@ -52,17 +56,8 @@ func (t *Tezos) FillContractAddresses(assets map[string]types.Asset) error {
 
 // Validate -
 func (t *Tezos) Validate() error {
-	if t.Node == "" {
-		return errors.New("empty tezos node URL (key `tezos.node`)")
-	}
-	if t.TzKT == "" {
-		return errors.New("empty tzkt URL (key `tezos.tzkt`)")
-	}
-	if t.Contract == "" {
-		return errors.New("empty atomex tezos contract (key `tezos.contract`)")
-	}
-	if len(t.Tokens) == 0 {
-		return errors.New("empty atomex tezos token contracts (key `tezos.tokens`)")
+	if err := validator.New().Struct(t); err != nil {
+		return err
 	}
 	if t.MinPayOff == "" {
 		t.MinPayOff = "0"
@@ -76,25 +71,16 @@ func (t *Tezos) Validate() error {
 // Ethereum -
 type Ethereum struct {
 	MinPayOff    string `yaml:"min_payoff"`
-	Node         string `yaml:"node"`
-	Wss          string `yaml:"wss"`
-	EthAddress   string `yaml:"eth_address"`
-	Erc20Address string `yaml:"erc20_address"`
+	Node         string `yaml:"node" validate:"required,uri"`
+	Wss          string `yaml:"wss" validate:"required,uri"`
+	EthAddress   string `yaml:"-" validate:"-"`
+	Erc20Address string `yaml:"-" validate:"-"`
 }
 
 // Validate -
 func (e *Ethereum) Validate() error {
-	if e.Node == "" {
-		return errors.New("empty ethereum node URL (key `ethereum.node`)")
-	}
-	if e.Wss == "" {
-		return errors.New("empty ethereum websocket URL (key `ethereum.wss`)")
-	}
-	if e.EthAddress == "" {
-		return errors.New("empty atomex ethereum contract address (key `ethereum.eth_address`)")
-	}
-	if e.Erc20Address == "" {
-		return errors.New("empty atomex erc20 contract address (key `ethereum.erc20_address`)")
+	if err := validator.New().Struct(e); err != nil {
+		return err
 	}
 	if e.MinPayOff == "" {
 		e.MinPayOff = "0"

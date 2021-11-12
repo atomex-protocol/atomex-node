@@ -157,7 +157,7 @@ func (ws *Websocket) listen() {
 				continue
 			}
 
-			ws.log.Trace().RawJSON("data", msg).Msg("server->client")
+			// ws.log.Trace().RawJSON("data", msg).Msg("server->client")
 
 			if err := ws.handleMessage(msg); err != nil {
 				ws.log.Err(err).Msg("handleMessage")
@@ -221,7 +221,7 @@ func (ws *Websocket) send(req *WebsocketRequest) error {
 	if err != nil {
 		return err
 	}
-	ws.log.Trace().RawJSON("data", data).Msg("client->server")
+	// ws.log.Trace().RawJSON("data", data).Msg("client->server")
 	return ws.conn.WriteMessage(websocket.TextMessage, data)
 }
 

@@ -9,7 +9,7 @@ require (
 	github.com/dipdup-net/go-lib v0.1.32
 	github.com/ebellocchia/go-base58 v0.1.0
 	github.com/ethereum/go-ethereum v1.10.12
-	github.com/go-playground/validator/v10 v10.9.0 // indirect
+	github.com/go-playground/validator/v10 v10.9.0
 	github.com/go-resty/resty/v2 v2.6.0 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/goat-systems/go-tezos/v4 v4.0.4

@@ -1,0 +1,18 @@
+KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J:
+  gas_limit:
+    initiate: "4000"
+    redeem: "7000"
+    refund: "7000"
+  storage_limit:
+    initiate: "257"
+    redeem: "257"
+    refund: "257"
+KT1KHdx4EC7WNVeeTGMr8utCSRczgu2EPCzX:
+  gas_limit:
+    initiate: "4000"
+    redeem: "7000"
+    refund: "7000"
+  storage_limit:
+    initiate: "257"
+    redeem: "257"
+    refund: "257"

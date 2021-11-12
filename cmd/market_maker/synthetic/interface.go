@@ -22,8 +22,8 @@ const (
 
 // Config -
 type Config struct {
-	Symbols []string `yaml:"symbols"`
-	Type    Type     `yaml:"type"`
+	Symbols []string `yaml:"symbols" validate:"required"`
+	Type    Type     `yaml:"type" validate:"required"`
 }
 
 func New(name string, cfg Config) (Synthetic, error) {

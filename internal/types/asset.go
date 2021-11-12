@@ -4,11 +4,11 @@ import "github.com/atomex-protocol/watch_tower/internal/chain"
 
 // Asset -
 type Asset struct {
-	Name           string `yaml:"name"`
-	Chain          string `yaml:"chain"`
+	Name           string `yaml:"name" validate:"require"`
+	Chain          string `yaml:"chain" validate:"require"`
 	Contract       string `yaml:"contract"`
-	AtomexContract string `yaml:"atomex_contract"`
-	Decimals       int    `yaml:"decimals"`
+	AtomexContract string `yaml:"atomex_contract" validate:"require"`
+	Decimals       int    `yaml:"decimals" validate:"require"`
 }
 
 // ChainType -

@@ -60,7 +60,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 	switch cfg.QuoteProvider.Kind {
 	case QuoteProviderKindBinance:
 		provider = binance.NewBinance(
-			binance.WithRestURL(binance.BaseURLServer1),
+			binance.WithRestURL(binance.BaseURLServer2),
 			binance.WithWebsocketURL(binance.BaseURLWebsocket),
 			binance.WithLogLevel(logLevel),
 		)
@@ -77,7 +77,13 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		return nil, errors.Wrap(err, "atomex.NewExchange")
 	}
 
-	track, err := tools.NewTracker(cfg.Chains, tools.WithLogLevel(logLevel)) //, tools.WithRestore())
+	trackerOptions := []tools.TrackerOption{
+		tools.WithLogLevel(logLevel),
+	}
+	if cfg.Restore {
+		trackerOptions = append(trackerOptions, tools.WithRestore())
+	}
+	track, err := tools.NewTracker(cfg.Chains, trackerOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -172,10 +178,6 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 		return errors.Wrap(err, "atomex.Connect")
 	}
 
-	if err := mm.initialize(ctx); err != nil {
-		return errors.Wrap(err, "initialize")
-	}
-
 	// init tracker
 
 	mm.wg.Add(1)
@@ -200,6 +202,10 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 		if err := mm.provider.Start(providerSymbols...); err != nil {
 			return errors.Wrap(err, "quoteProvider.Start")
 		}
+	}
+
+	if err := mm.initialize(ctx); err != nil {
+		return errors.Wrap(err, "initialize")
 	}
 
 	return nil
@@ -312,12 +318,8 @@ func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
 		end = len(swaps) != limitForAtomexRequest
 
 		for i := range swaps {
-			swap, err := mm.atomexSwapToInternal(swaps[i])
-			if err != nil {
-				return errors.Wrap(err, "atomexSwapToInternal")
-			}
-			if swap != nil {
-				mm.swaps.Store(chain.Hex(swaps[i].SecretHash), swap)
+			if err := mm.handleAtomexSwapUpdate(swaps[i]); err != nil {
+				return errors.Wrap(err, "handleAtomexSwapUpdate")
 			}
 		}
 	}

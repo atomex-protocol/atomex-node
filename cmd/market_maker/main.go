@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/config"
+	"github.com/go-playground/validator/v10"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -30,19 +31,31 @@ func main() {
 	if err := config.Load(configName, &cfg); err != nil {
 		log.Panic().Err(err).Str("file", configName).Msg("config.Load")
 	}
+	if err := validator.New().Struct(cfg); err != nil {
+		log.Panic().Err(err).Msg("validation market maket config")
+	}
 
 	info, err := config.LoadMetaInfo(path.Join(configDir, "assets.yml"), path.Join(configDir, "symbols.yml"))
 	if err != nil {
 		log.Panic().Err(err).Msg("config.LoadMetaInfo")
+	}
+	if err := validator.New().Struct(info); err != nil {
+		log.Panic().Err(err).Msg("validation assets config")
 	}
 	cfg.Info = info
 
 	if err := config.Load(path.Join(configDir, "atomex.yml"), &cfg.Atomex); err != nil {
 		log.Panic().Err(err).Str("file", path.Join(configDir, "atomex.yml")).Msg("config.Load")
 	}
+	if err := validator.New().Struct(cfg.Atomex); err != nil {
+		log.Panic().Err(err).Msg("validation atomex config")
+	}
 
 	if err := config.Load(path.Join(configDir, "chains.yml"), &cfg.Chains); err != nil {
 		log.Panic().Err(err).Str("file", path.Join(configDir, "chains.yml")).Msg("config.Load")
+	}
+	if err := validator.New().Struct(cfg.Chains); err != nil {
+		log.Panic().Err(err).Msg("validation chains config")
 	}
 
 	if err := cfg.Chains.Ethereum.FillContractAddresses(cfg.Info.Assets); err != nil {
@@ -50,6 +63,9 @@ func main() {
 	}
 	if err := cfg.Chains.Tezos.FillContractAddresses(cfg.Info.Assets); err != nil {
 		log.Panic().Err(err).Msg("FillContractAddresses")
+	}
+	if err := config.Load(path.Join(configDir, "tezos.yml"), &cfg.Chains.Tezos.OperaitonParams); err != nil {
+		log.Panic().Err(err).Str("file", path.Join(configDir, "tezos.yml")).Msg("config.Load")
 	}
 
 	if err := cfg.Chains.Ethereum.Validate(); err != nil {
@@ -64,6 +80,10 @@ func main() {
 	var quoteProviderConfig QuoteProviderMeta
 	if err := config.Load(quoteProviderFile, &quoteProviderConfig); err != nil {
 		log.Panic().Err(err).Str("file", quoteProviderFile).Msg("config.Load")
+	}
+
+	if err := validator.New().Struct(quoteProviderConfig); err != nil {
+		log.Panic().Err(err).Msg("validation quote provider config")
 	}
 	cfg.QuoteProvider.Meta = quoteProviderConfig
 

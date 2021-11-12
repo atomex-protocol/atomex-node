@@ -67,3 +67,19 @@ type Transaction struct {
 	Hash   string `mapstructure:"hash" json:"hash"`
 	Status string `mapstructure:"status" json:"status"`
 }
+
+// OperationParamsByContracts -
+type OperationParamsByContracts map[string]OperationParams
+
+// OperationParams -
+type OperationParams struct {
+	GasLimit     ContractParams `yaml:"gas_limit"`
+	StorageLimit ContractParams `yaml:"storage_limit"`
+}
+
+// ContractParams -
+type ContractParams struct {
+	Initiate string `yaml:"initiate"`
+	Refund   string `yaml:"refund"`
+	Redeem   string `yaml:"redeem"`
+}

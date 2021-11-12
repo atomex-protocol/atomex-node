@@ -33,12 +33,13 @@ type Tracker struct {
 // NewTracker -
 func NewTracker(cfg Config, opts ...TrackerOption) (*Tracker, error) {
 	tezosChain, err := tezos.New(tezos.Config{
-		Node:      cfg.Tezos.Node,
-		TzKT:      cfg.Tezos.TzKT,
-		Contract:  cfg.Tezos.Contract,
-		Tokens:    cfg.Tezos.Tokens,
-		MinPayOff: cfg.Tezos.MinPayOff,
-		TTL:       cfg.Tezos.TTL,
+		Node:            cfg.Tezos.Node,
+		TzKT:            cfg.Tezos.TzKT,
+		Contract:        cfg.Tezos.Contract,
+		Tokens:          cfg.Tezos.Tokens,
+		MinPayOff:       cfg.Tezos.MinPayOff,
+		TTL:             cfg.Tezos.TTL,
+		OperaitonParams: cfg.Tezos.OperaitonParams,
 	})
 	if err != nil {
 		return nil, err
