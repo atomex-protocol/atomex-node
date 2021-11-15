@@ -5,7 +5,6 @@ import (
 
 	"github.com/atomex-protocol/watch_tower/internal/chain/tezos"
 	"github.com/atomex-protocol/watch_tower/internal/types"
-	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -20,10 +19,10 @@ type Config struct {
 
 // Tezos -
 type Tezos struct {
-	MinPayOff string `yaml:"min_payoff"`
+	MinPayOff string `yaml:"min_payoff" validate:"numeric"`
 	Node      string `yaml:"node" validate:"required,uri"`
 	TzKT      string `yaml:"tzkt" validate:"required,uri"`
-	TTL       int64  `yaml:"ttl"`
+	TTL       int64  `yaml:"ttl" validate:"gt=0"`
 
 	Tokens          []string                         `yaml:"-" validate:"-"`
 	Contract        string                           `yaml:"-" validate:"-"`
@@ -54,20 +53,6 @@ func (t *Tezos) FillContractAddresses(assets map[string]types.Asset) error {
 	return nil
 }
 
-// Validate -
-func (t *Tezos) Validate() error {
-	if err := validator.New().Struct(t); err != nil {
-		return err
-	}
-	if t.MinPayOff == "" {
-		t.MinPayOff = "0"
-	}
-	if t.TTL == 0 {
-		t.TTL = 5
-	}
-	return nil
-}
-
 // Ethereum -
 type Ethereum struct {
 	MinPayOff    string `yaml:"min_payoff"`
@@ -75,17 +60,6 @@ type Ethereum struct {
 	Wss          string `yaml:"wss" validate:"required,uri"`
 	EthAddress   string `yaml:"-" validate:"-"`
 	Erc20Address string `yaml:"-" validate:"-"`
-}
-
-// Validate -
-func (e *Ethereum) Validate() error {
-	if err := validator.New().Struct(e); err != nil {
-		return err
-	}
-	if e.MinPayOff == "" {
-		e.MinPayOff = "0"
-	}
-	return nil
 }
 
 // FillContractAddresses -

@@ -33,7 +33,7 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 	if cfg.Restore {
 		opts = append(opts, tools.WithRestore())
 	}
-	track, err := tools.NewTracker(cfg.Chains, opts...)
+	track, err := tools.NewTracker(cfg.General.Chains, opts...)
 	if err != nil {
 		return nil, err
 	}

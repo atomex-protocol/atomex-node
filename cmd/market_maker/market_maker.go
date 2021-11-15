@@ -71,7 +71,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 	atomexExchange, err := atomex.NewExchange(
 		atomex.WithLogLevel(logLevel),
 		atomex.WithSignature(signers.AlgorithmBlake2bWithEcdsaSecp256k1),
-		atomex.WithWebsocketURI(cfg.Atomex.WsAPI),
+		atomex.WithWebsocketURI(cfg.General.Atomex.WsAPI),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "atomex.NewExchange")
@@ -83,7 +83,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 	if cfg.Restore {
 		trackerOptions = append(trackerOptions, tools.WithRestore())
 	}
-	track, err := tools.NewTracker(cfg.Chains, trackerOptions...)
+	track, err := tools.NewTracker(cfg.General.Chains, trackerOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		}
 		strategies = append(strategies, strategy)
 
-		for _, symbol := range cfg.Info.Symbols {
+		for _, symbol := range cfg.General.Symbols {
 			if symbol.Name == s.SymbolName {
 				symbols[s.SymbolName] = symbol
 				break
@@ -106,7 +106,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 	}
 
 	synthetics := make(map[string]synthetic.Synthetic)
-	for symbol, cfg := range cfg.QuoteProvider.Meta.FromSymbols {
+	for symbol, cfg := range cfg.QuoteProviderMeta.FromSymbols {
 		synth, err := synthetic.New(symbol, cfg)
 		if err != nil {
 			return nil, err
@@ -119,7 +119,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		provider: provider,
 		atomex:   atomexExchange,
 		atomexAPI: atomex.NewRest(
-			atomex.WithURL(cfg.Atomex.RestAPI),
+			atomex.WithURL(cfg.General.Atomex.RestAPI),
 			atomex.WithSignatureAlgorithm(signers.AlgorithmBlake2bWithEcdsaSecp256k1),
 		),
 		tracker:           track,
@@ -127,8 +127,8 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		symbols:           symbols,
 		synthetics:        synthetics,
 		keys:              cfg.Keys,
-		atomexMeta:        cfg.Atomex,
-		quoteProviderMeta: cfg.QuoteProvider.Meta,
+		atomexMeta:        cfg.General.Atomex,
+		quoteProviderMeta: cfg.QuoteProviderMeta,
 		orders:            NewOrdersMap(),
 		swaps:             NewSwapsMap(),
 		tickers:           make(map[string]exchange.Ticker),

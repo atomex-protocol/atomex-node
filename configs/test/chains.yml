@@ -2,7 +2,9 @@ tezos:
   node: https://rpc.tzkt.io/granadanet
   tzkt: https://api.granadanet.tzkt.io
   ttl: 60
+  min_payoff: "0"
 
 ethereum:
   node: https://ropsten.infura.io/v3/c472af462a664d93a4ca3962ae5e3749
   wss: wss://ropsten.infura.io/ws/v3/c472af462a664d93a4ca3962ae5e3749
+  min_payoff: "0"

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"path"
@@ -19,32 +20,21 @@ func main() {
 
 	flag.Parse()
 
+	ctx := context.Background()
+
 	configDir = config.SelectEnvironment(configDir)
 
 	var cfg Config
 	configName := path.Join(configDir, "watch_tower.yml")
-	if err := config.Load(configName, &cfg); err != nil {
-		log.Panic().Err(err).Msg("")
+	if err := config.Load(ctx, configName, &cfg); err != nil {
+		log.Panic().Err(err).Msg("config.Load")
 	}
 
-	if err := config.Load(path.Join(configDir, "chains.yml"), &cfg.Chains); err != nil {
-		log.Panic().Err(err).Str("file", path.Join(configDir, "chains.yml")).Msg("config.Load")
+	general, err := config.LoadGeneralConfig(ctx, configDir)
+	if err != nil {
+		log.Panic().Err(err).Msg("LoadGeneralConfig")
 	}
-
-	if err := config.Load(path.Join(configDir, "assets.yml"), &cfg.Assets); err != nil {
-		log.Panic().Err(err).Str("file", path.Join(configDir, "chains.yml")).Msg("config.Load")
-	}
-
-	if err := cfg.Chains.Ethereum.FillContractAddresses(cfg.Assets); err != nil {
-		log.Panic().Err(err).Msg("FillContractAddresses")
-	}
-	if err := cfg.Chains.Tezos.FillContractAddresses(cfg.Assets); err != nil {
-		log.Panic().Err(err).Msg("FillContractAddresses")
-	}
-
-	if err := cfg.Validate(); err != nil {
-		log.Panic().Err(err).Msg("")
-	}
+	cfg.General = general
 
 	if err := run(cfg); err != nil {
 		log.Panic().Stack().Err(err).Msg("")

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"path"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/config"
-	"github.com/go-playground/validator/v10"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -24,75 +22,30 @@ func main() {
 
 	flag.Parse()
 
+	ctx := context.Background()
+
 	configDir = config.SelectEnvironment(configDir)
 
 	var cfg Config
 	configName := path.Join(configDir, "market_maker.yml")
-	if err := config.Load(configName, &cfg); err != nil {
+	if err := config.Load(ctx, configName, &cfg); err != nil {
 		log.Panic().Err(err).Str("file", configName).Msg("config.Load")
 	}
-	if err := validator.New().Struct(cfg); err != nil {
-		log.Panic().Err(err).Msg("validation market maket config")
-	}
 
-	info, err := config.LoadMetaInfo(path.Join(configDir, "assets.yml"), path.Join(configDir, "symbols.yml"))
+	info, err := config.LoadGeneralConfig(ctx, configDir)
 	if err != nil {
-		log.Panic().Err(err).Msg("config.LoadMetaInfo")
+		log.Panic().Err(err).Msg("config.LoadGeneralConfig")
 	}
-	if err := validator.New().Struct(info); err != nil {
-		log.Panic().Err(err).Msg("validation assets config")
-	}
-	cfg.Info = info
+	cfg.General = info
 
-	if err := config.Load(path.Join(configDir, "atomex.yml"), &cfg.Atomex); err != nil {
-		log.Panic().Err(err).Str("file", path.Join(configDir, "atomex.yml")).Msg("config.Load")
+	if err := cfg.loadQuoteProviderMeta(ctx); err != nil {
+		log.Panic().Err(err).Msg("config.loadQuoteProviderMeta")
 	}
-	if err := validator.New().Struct(cfg.Atomex); err != nil {
-		log.Panic().Err(err).Msg("validation atomex config")
-	}
-
-	if err := config.Load(path.Join(configDir, "chains.yml"), &cfg.Chains); err != nil {
-		log.Panic().Err(err).Str("file", path.Join(configDir, "chains.yml")).Msg("config.Load")
-	}
-	if err := validator.New().Struct(cfg.Chains); err != nil {
-		log.Panic().Err(err).Msg("validation chains config")
-	}
-
-	if err := cfg.Chains.Ethereum.FillContractAddresses(cfg.Info.Assets); err != nil {
-		log.Panic().Err(err).Msg("FillContractAddresses")
-	}
-	if err := cfg.Chains.Tezos.FillContractAddresses(cfg.Info.Assets); err != nil {
-		log.Panic().Err(err).Msg("FillContractAddresses")
-	}
-	if err := config.Load(path.Join(configDir, "tezos.yml"), &cfg.Chains.Tezos.OperaitonParams); err != nil {
-		log.Panic().Err(err).Str("file", path.Join(configDir, "tezos.yml")).Msg("config.Load")
-	}
-
-	if err := cfg.Chains.Ethereum.Validate(); err != nil {
-		log.Panic().Err(err).Msg("config.Ethereum.Validate")
-	}
-
-	if err := cfg.Chains.Tezos.Validate(); err != nil {
-		log.Panic().Err(err).Msg("config.Tezos.Validate")
-	}
-
-	quoteProviderFile := path.Join(configDir, fmt.Sprintf("%s.yml", cfg.QuoteProvider.Kind))
-	var quoteProviderConfig QuoteProviderMeta
-	if err := config.Load(quoteProviderFile, &quoteProviderConfig); err != nil {
-		log.Panic().Err(err).Str("file", quoteProviderFile).Msg("config.Load")
-	}
-
-	if err := validator.New().Struct(quoteProviderConfig); err != nil {
-		log.Panic().Err(err).Msg("validation quote provider config")
-	}
-	cfg.QuoteProvider.Meta = quoteProviderConfig
 
 	marketMaker, err := NewMarketMaker(cfg)
 	if err != nil {
 		log.Panic().Err(err).Msg("NewMarketMaker")
 	}
-
-	ctx := context.Background()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
