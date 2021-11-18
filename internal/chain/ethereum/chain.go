@@ -140,8 +140,9 @@ func initKeystore(e *Ethereum) error {
 // Wallet -
 func (e *Ethereum) Wallet() chain.Wallet {
 	return chain.Wallet{
-		Address: e.address.Hex(),
-		// Private: e.privateKey,
+		Address:   e.address.Hex(),
+		Private:   crypto.FromECDSA(e.privateKey),
+		PublicKey: crypto.CompressPubkey(&e.privateKey.PublicKey),
 	}
 }
 

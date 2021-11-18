@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 
 	"github.com/goat-systems/go-tezos/v4/keys"
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -25,24 +26,24 @@ func (Ed25519Blake2b) Generate() (*Key, error) {
 
 // Sign -
 func (Ed25519Blake2b) Sign(key *Key, msg []byte) ([]byte, error) {
-	private, err := keys.FromBytes(key.Private, keys.Ed25519)
+	hash, err := blake2b.New(32, []byte{})
 	if err != nil {
 		return nil, err
 	}
-	signature, err := private.SignBytes(msg)
+
+	i, err := hash.Write(msg)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to sign operation bytes")
 	}
-	return signature.ToBytes(), nil
+	if i != len(msg) {
+		return nil, errors.Errorf("failed to sign operation: generic hash length %d does not match bytes length %d", i, len(msg))
+	}
+
+	return ed25519.Sign(key.Private, hash.Sum([]byte{})), nil
 }
 
 // Verify -
 func (Ed25519Blake2b) Verify(key *Key, msg, signature []byte) bool {
-	if msg != nil {
-		if msg[0] != byte(3) {
-			msg = append([]byte{3}, msg...)
-		}
-	}
 	hash, err := blake2b.New(32, []byte{})
 	if err != nil {
 		return false

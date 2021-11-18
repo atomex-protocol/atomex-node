@@ -11,6 +11,7 @@ import (
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/synthetic"
 	"github.com/atomex-protocol/watch_tower/internal/atomex"
+	"github.com/atomex-protocol/watch_tower/internal/atomex/signers"
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/exchange"
 	"github.com/atomex-protocol/watch_tower/internal/types"
@@ -186,14 +187,13 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 		return errors.Wrap(err, "secret")
 	}
 
-	// TODO: proof of funds
-	// req := atomex.NewTokenRequest(sender.Address, signers.AlgorithmBlake2bWithEcdsaSecp256k1, sender.PublicKey)
-	// if err := req.Sign(&signers.Key{
-	// 	Public:  sender.PublicKey,
-	// 	Private: sender.Private,
-	// }); err != nil {
-	// 	return errors.Wrap(err, "Sign")
-	// }
+	req := atomex.NewTokenRequest(sender.Address, signers.AlgorithmEd25519Blake2b, sender.PublicKey)
+	if err := req.Sign(&signers.Key{
+		Public:  sender.PublicKey,
+		Private: sender.Private,
+	}); err != nil {
+		return errors.Wrap(err, "Sign")
+	}
 
 	request := atomex.AddOrderRequest{
 		ClientOrderID: clientID.String(),
@@ -202,17 +202,17 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 		Qty:           qty,
 		Side:          side,
 		Type:          atomex.OrderTypeReturn,
-		// ProofsOfFunds: []atomex.ProofOfFunds{
-		// 	{
-		// 		Address:   sender.Address,
-		// 		Currency:  sender.Currency,
-		// 		Algorithm: req.Algorithm,
-		// 		Message:   req.Message,
-		// 		PublicKey: req.PublicKey,
-		// 		Signature: req.Signature,
-		// 		Timestamp: req.Timestamp,
-		// 	},
-		// },
+		ProofsOfFunds: []atomex.ProofOfFunds{
+			{
+				Address:   sender.Address,
+				Currency:  sender.Currency,
+				Algorithm: req.Algorithm,
+				Message:   req.Message,
+				PublicKey: req.PublicKey,
+				Signature: req.Signature,
+				Timestamp: req.Timestamp,
+			},
+		},
 		Requisites: &atomex.Requisites{
 			BaseCurrencyContract:  symbolInfo.Base.AtomexContract,
 			QuoteCurrencyContract: symbolInfo.Quote.AtomexContract,

@@ -16,6 +16,10 @@ func New(kind StorageKind) (Storage, error) {
 	switch kind {
 	case StorageKindCustom:
 		return NewCustomsBlake2bWithEcdsaSecp256k1(), nil
+	case StorageKindTezos:
+		return NewTezosWallet()
+	case StorageKindEthereum:
+		return NewEthereumWallet()
 	default:
 		return nil, errors.Errorf("unknown key storage kind: %s", kind)
 	}
@@ -26,5 +30,7 @@ type StorageKind string
 
 // kinds
 const (
-	StorageKindCustom = "custom"
+	StorageKindCustom   = "custom"
+	StorageKindTezos    = "tezos"
+	StorageKindEthereum = "ethereum"
 )

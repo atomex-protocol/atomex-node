@@ -260,7 +260,7 @@ quote_provider:
 
 keys:
   file: <file which contains key data>
-  kind: <kind of key file. Only `custom`supported>
+  kind: <kind of key file. custom | tezos>
   generate_if_not_exists: <flag which is set for generating keys if not exists (*false* by default)>
 
 strategies:  # array of strategies
