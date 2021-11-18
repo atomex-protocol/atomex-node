@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
 	"github.com/atomex-protocol/watch_tower/internal/atomex"
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
+	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/pkg/errors"
 )
 
@@ -107,7 +107,7 @@ func (swaps *SwapsMap) Store(hashedSecret chain.Hex, swap *tools.Swap) {
 // Load -
 func (swaps *SwapsMap) LoadOrStore(hashedSecret chain.Hex, swap *tools.Swap) *tools.Swap {
 	val, ok := swaps.Load(hashedSecret)
-	if !ok {
+	if ok {
 		return val
 	}
 
@@ -141,33 +141,71 @@ type clientOrderID struct {
 	kind   strategy.Kind
 	symbol string
 	side   strategy.Side
-	index  uint64
+	index  int64
 }
 
 func (c clientOrderID) String() string {
-	return fmt.Sprintf("%s|%s|%d|%d", c.kind, c.symbol, c.side, c.index)
+	return fmt.Sprintf("%d%d%d%s", strategyKindToInt(c.kind), c.side, c.index, c.symbol)
 }
 
 func (c *clientOrderID) parse(str string) error {
-	parts := strings.Split(str, "|")
-	if len(parts) != 4 {
+	if len(str) < 22 {
 		return errors.Errorf("invalid client order id '%s'", str)
 	}
 
-	c.kind = strategy.Kind(parts[0])
-	c.symbol = parts[1]
+	kind, err := strconv.ParseInt(str[0:1], 10, 64)
+	if err != nil {
+		return errors.Wrapf(err, "invalid client order id '%s'", str)
+	}
+	c.kind = intToStrategyKind(kind)
 
-	side, err := strconv.ParseInt(parts[2], 10, 32)
+	side, err := strconv.ParseInt(str[1:2], 10, 32)
 	if err != nil {
 		return errors.Wrapf(err, "invalid client order id '%s'", str)
 	}
 	c.side = strategy.Side(side)
 
-	index, err := strconv.ParseUint(parts[3], 10, 64)
+	index, err := strconv.ParseInt(str[2:21], 10, 64)
 	if err != nil {
 		return errors.Wrapf(err, "invalid client order id '%s'", str)
 	}
 	c.index = index
 
+	c.symbol = str[21:]
+
 	return nil
+}
+
+func strategyKindToInt(kind strategy.Kind) int {
+	switch kind {
+	case strategy.KindFollow:
+		return 1
+	case strategy.KindOneByOne:
+		return 2
+	case strategy.KindVolatility:
+		return 3
+	}
+	return 0
+}
+
+func intToStrategyKind(kind int64) strategy.Kind {
+	switch kind {
+	case 1:
+		return strategy.KindFollow
+	case 2:
+		return strategy.KindOneByOne
+	case 3:
+		return strategy.KindVolatility
+	}
+	return strategy.KindUnknown
+}
+
+// Wallet -
+type Wallet struct {
+	chain.Wallet
+	Currency string
+}
+
+func newWallet(wallet chain.Wallet, asset types.Asset) Wallet {
+	return Wallet{wallet, asset.Name}
 }

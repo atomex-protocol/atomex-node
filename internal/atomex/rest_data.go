@@ -46,7 +46,8 @@ type TokenRequest struct {
 	Algorithm string `json:"algorithm"`
 }
 
-func newTokenRequest(message, algorithm string, publicKey []byte) TokenRequest {
+// NewTokenRequest -
+func NewTokenRequest(message, algorithm string, publicKey []byte) TokenRequest {
 	return TokenRequest{
 		Timestamp: time.Now().UnixNano() / 1_000_000,
 		PublicKey: hex.EncodeToString(publicKey),
@@ -55,7 +56,8 @@ func newTokenRequest(message, algorithm string, publicKey []byte) TokenRequest {
 	}
 }
 
-func (req *TokenRequest) sign(key *signers.Key) error {
+// Sign -
+func (req *TokenRequest) Sign(key *signers.Key) error {
 	signingMessage := fmt.Sprintf("%s%d", req.Message, req.Timestamp)
 	signature, err := signers.Sign(req.Algorithm, key, []byte(signingMessage), true)
 	if err != nil {

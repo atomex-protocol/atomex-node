@@ -177,8 +177,8 @@ func (t *Tracker) onEvent(event chain.Event) {
 	case chain.RefundEvent:
 		t.onRefund(e)
 	case chain.RestoredEvent:
-		atomic.AddInt32(&t.restoreCounter, 1)
 		t.logger.Info().Str("blockchain", e.Chain.String()).Msg("restored")
+		atomic.AddInt32(&t.restoreCounter, 1)
 
 		if t.restoreCounter == chainsCount {
 			for id := range t.swaps {

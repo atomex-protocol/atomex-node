@@ -35,6 +35,11 @@ func (swap *Swap) Log(logger *zerolog.Event) *zerolog.Event {
 		Str("acceptor_chain", swap.Acceptor.ChainType.String())
 }
 
+// IsUnknown -
+func (swap *Swap) IsUnknown() bool {
+	return swap.Acceptor.ChainType == chain.ChainTypeUnknown || swap.Initiator.ChainType == chain.ChainTypeUnknown
+}
+
 func (swap *Swap) fromInitEvent(event chain.InitEvent) {
 	if swap.HashedSecret != event.HashedSecret() {
 		return

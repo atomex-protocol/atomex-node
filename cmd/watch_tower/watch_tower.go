@@ -86,7 +86,7 @@ func (wt *WatchTower) Close() error {
 func (wt *WatchTower) listen() {
 	defer wt.wg.Done()
 
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(time.Second * 30)
 	defer ticker.Stop()
 
 	for {
@@ -150,6 +150,10 @@ func (wt *WatchTower) checkRefundTime() {
 		if wt.stopped {
 			return
 		}
+		if swap.IsUnknown() {
+			continue
+		}
+
 		if swap.RefundTime.UTC().Before(time.Now().UTC()) {
 			if err := wt.refund(swap); err != nil {
 				log.Err(err).Msg("refund")
@@ -173,6 +177,14 @@ func (wt *WatchTower) refund(swap *Swap) error {
 	if leg := swap.Leg(); leg != nil {
 		swap.RetryCount++
 		return wt.tracker.Refund(swap.Swap, *leg)
+	}
+
+	if swap.Acceptor.Status == tools.StatusInitiated && swap.Initiator.Status == tools.StatusInitiated {
+		swap.RetryCount++
+		if err := wt.tracker.Refund(swap.Swap, swap.Initiator); err != nil {
+			return err
+		}
+		return wt.tracker.Refund(swap.Swap, swap.Acceptor)
 	}
 
 	return nil

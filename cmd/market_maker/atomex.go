@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"sync/atomic"
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/cmd/market_maker/strategy"
@@ -53,6 +52,10 @@ func (mm *MarketMaker) handleAtomexUpdate(data atomex.Message) error {
 		mm.log.Info().Int64("id", val.ID).Str("user_status", string(val.User.Status)).Str("counterparty_status", string(val.CounterParty.Status)).Msg("atomex swap status changed")
 
 		if err := mm.handleAtomexSwapUpdate(val); err != nil {
+			return err
+		}
+
+		if err := mm.initiateInvolvedSwap(val); err != nil {
 			return err
 		}
 	}
@@ -138,7 +141,7 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 		kind:   quote.Strategy,
 		symbol: quote.Symbol,
 		side:   quote.Side,
-		index:  atomic.AddUint64(&mm.ordersCounter, 1),
+		index:  time.Now().UnixNano(),
 	}
 
 	var cancelErr error
@@ -178,10 +181,19 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 		return errors.Wrap(err, "getSenderWallet")
 	}
 
-	scrt, err := mm.secret(sender.Private, sender.Address, time.Now().UnixNano())
+	scrt, err := mm.secret(sender.Private, sender.Address, clientID.index)
 	if err != nil {
 		return errors.Wrap(err, "secret")
 	}
+
+	// TODO: proof of funds
+	// req := atomex.NewTokenRequest(sender.Address, signers.AlgorithmBlake2bWithEcdsaSecp256k1, sender.PublicKey)
+	// if err := req.Sign(&signers.Key{
+	// 	Public:  sender.PublicKey,
+	// 	Private: sender.Private,
+	// }); err != nil {
+	// 	return errors.Wrap(err, "Sign")
+	// }
 
 	request := atomex.AddOrderRequest{
 		ClientOrderID: clientID.String(),
@@ -190,12 +202,23 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 		Qty:           qty,
 		Side:          side,
 		Type:          atomex.OrderTypeReturn,
+		// ProofsOfFunds: []atomex.ProofOfFunds{
+		// 	{
+		// 		Address:   sender.Address,
+		// 		Currency:  sender.Currency,
+		// 		Algorithm: req.Algorithm,
+		// 		Message:   req.Message,
+		// 		PublicKey: req.PublicKey,
+		// 		Signature: req.Signature,
+		// 		Timestamp: req.Timestamp,
+		// 	},
+		// },
 		Requisites: &atomex.Requisites{
 			BaseCurrencyContract:  symbolInfo.Base.AtomexContract,
 			QuoteCurrencyContract: symbolInfo.Quote.AtomexContract,
-			SecretHash:            scrt.Hash,
 			ReceivingAddress:      receiver.Address,
 			RefundAddress:         receiver.Address,
+			SecretHash:            scrt.Hash,
 			LockTime:              mm.atomexMeta.Settings.LockTime,
 			RewardForRedeem:       mm.atomexMeta.Settings.RewardForRedeem,
 		},
@@ -228,7 +251,8 @@ func (mm *MarketMaker) secret(key []byte, address string, nonce int64) (secret, 
 	var s secret
 	s.Value = hex.EncodeToString(scrt)
 
-	secretHash := sha256.Sum256(scrt)
+	first := sha256.Sum256(scrt)
+	secretHash := sha256.Sum256(first[:])
 	s.Hash = hex.EncodeToString(secretHash[:])
 	return s, nil
 }
@@ -304,25 +328,47 @@ func (mm *MarketMaker) handleAtomexSwapUpdate(swap atomex.Swap) error {
 		return nil
 	}
 
+	refundTime := swap.TimeStamp.Add(time.Duration(swap.User.Requisites.LockTime) * time.Second)
+	if refundTime.Before(time.Now()) {
+		mm.log.Warn().Msg("refund time has already come")
+		return nil
+	}
+
 	s, err := mm.atomexSwapToInternal(swap)
 	if err != nil {
 		return errors.Wrap(err, "atomexSwapToInternal")
 	}
 
-	mm.swaps.Store(chain.Hex(swap.SecretHash), s)
+	mm.swaps.LoadOrStore(chain.Hex(swap.SecretHash), s)
+	return nil
+}
+
+func (mm *MarketMaker) initiateInvolvedSwap(swap atomex.Swap) error {
+	if swap.SecretHash == "" {
+		return nil
+	}
+	symbol, ok := mm.atomexMeta.FromSymbols[swap.Symbol]
+	if !ok {
+		return errors.Errorf("unknown symbol: %s", swap.Symbol)
+	}
+
+	info, ok := mm.symbols[symbol]
+	if !ok {
+		return errors.Errorf("unknown symbol: %s", symbol)
+	}
 
 	var asset types.Asset
 	switch swap.Side {
 	case atomex.SideBuy:
-		asset = s.Symbol.Quote
+		asset = info.Quote
 	case atomex.SideSell:
-		asset = s.Symbol.Base
+		asset = info.Base
 	}
 
 	payOff := decimal.NewFromFloat(mm.atomexMeta.Settings.RewardForRedeem)
 	refundTime := swap.TimeStamp.Add(time.Duration(swap.User.Requisites.LockTime) * time.Second)
 
-	if err := mm.tracker.Initiate(chain.InitiateArgs{
+	return mm.tracker.Initiate(chain.InitiateArgs{
 		HashedSecret: chain.Hex(swap.User.Requisites.SecretHash),
 		Participant:  swap.CounterParty.Requisites.ReceivingAddress,
 		Contract:     asset.AtomexContract,
@@ -330,11 +376,7 @@ func (mm *MarketMaker) handleAtomexSwapUpdate(swap atomex.Swap) error {
 		Amount:       amountToInt(swap.Qty, asset.Decimals),
 		PayOff:       payOff,
 		RefundTime:   refundTime,
-	}, asset.ChainType()); err != nil {
-		return errors.Wrap(err, "Initiate")
-	}
-
-	return nil
+	}, asset.ChainType())
 }
 
 func (mm *MarketMaker) handleAtomexOrderUpdate(order atomex.OrderWebsocket) error {
@@ -356,7 +398,7 @@ func (mm *MarketMaker) handleAtomexOrderUpdate(order atomex.OrderWebsocket) erro
 
 	case atomex.OrderStatusFilled, atomex.OrderStatusPartiallyFilled: // do not handle. it's because it's handled in `handleAtomexSwapUpdate`
 	case atomex.OrderStatusPending: // do not handle. it's internal atomex status.
-	case atomex.OrderStatusPlaced: // do not handle, because it's handled above
+	case atomex.OrderStatusPlaced:
 	}
 	return nil
 }

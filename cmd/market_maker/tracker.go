@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
+
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
 	"github.com/pkg/errors"
 )
 
-func (mm *MarketMaker) listenTracker() {
+func (mm *MarketMaker) listenTracker(ctx context.Context) {
 	defer mm.wg.Done()
 
 	for {
@@ -30,15 +32,33 @@ func (mm *MarketMaker) listenTracker() {
 
 			switch current.Status {
 			case tools.StatusInitiated:
+				if current.IsUnknown() {
+					continue
+				}
+
 				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("swap is initiated. redeeming...")
 
-				if err := mm.tracker.Redeem(*current, current.Initiator); err != nil {
+				if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+					mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+					continue
+				}
+
+				if err := mm.tracker.Redeem(*current, current.Acceptor); err != nil {
 					mm.log.Err(err).Msg("tracker.Redeem")
 					continue
 				}
 
 			case tools.StatusRefundedOnce:
+				if current.IsUnknown() {
+					continue
+				}
+
 				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("counterparty refunded swap. refunding...")
+
+				if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+					mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+					continue
+				}
 
 				if err := mm.tracker.Refund(*current, current.Initiator); err != nil {
 					mm.log.Err(err).Msg("tracker.Refund")
@@ -80,5 +100,25 @@ func (mm *MarketMaker) handleOperationFromChain(operation chain.Operation) error
 	default:
 		return errors.Errorf("unknown operation status: %s", operation.Status.String())
 	}
+	return nil
+}
+
+func (mm *MarketMaker) restoreSecretFromTrackerAtomex(ctx context.Context, swap *tools.Swap) error {
+	if !swap.Secret.IsEmpty() {
+		return nil
+	}
+
+	for i := range mm.activeSwaps {
+		if mm.activeSwaps[i].SecretHash != swap.HashedSecret.String() {
+			continue
+		}
+
+		if err := mm.restoreSecretForAtomexSwap(ctx, mm.activeSwaps[i], swap); err != nil {
+			return errors.Wrap(err, "restoreSecretForAtomexSwap")
+		}
+
+		break
+	}
+
 	return nil
 }

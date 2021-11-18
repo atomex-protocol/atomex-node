@@ -45,3 +45,8 @@ func (h Hex) Bytes32() ([32]byte, error) {
 func (h Hex) String() string {
 	return string(h)
 }
+
+// IsEmpty -
+func (h Hex) IsEmpty() bool {
+	return len(h) == 0
+}

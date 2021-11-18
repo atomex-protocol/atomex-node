@@ -1,6 +1,7 @@
 package tezos
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/logger"
+	"github.com/dipdup-net/go-lib/node"
+	"github.com/dipdup-net/go-lib/tools/forge"
 	"github.com/dipdup-net/go-lib/tzkt/api"
 	"github.com/dipdup-net/go-lib/tzkt/events"
 	"github.com/mitchellh/mapstructure"
@@ -18,15 +21,13 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/shopspring/decimal"
 
-	"github.com/goat-systems/go-tezos/v4/forge"
 	"github.com/goat-systems/go-tezos/v4/keys"
-	"github.com/goat-systems/go-tezos/v4/rpc"
 )
 
 // Tezos -
 type Tezos struct {
 	cfg        Config
-	rpc        *rpc.Client
+	rpc        *node.NodeRPC
 	api        *api.API
 	eventsTzKT *events.TzKT
 	key        *keys.Key
@@ -65,11 +66,6 @@ func New(cfg Config) (*Tezos, error) {
 		return nil, errors.New("empty operations params for tezos. you have to create tezos.yml")
 	}
 
-	client, err := rpc.New(cfg.Node)
-	if err != nil {
-		return nil, err
-	}
-
 	secret, err := chain.LoadSecret("TEZOS_PRIVATE")
 	if err != nil {
 		return nil, err
@@ -86,7 +82,7 @@ func New(cfg Config) (*Tezos, error) {
 
 	tez := &Tezos{
 		cfg:        cfg,
-		rpc:        client,
+		rpc:        node.NewNodeRPC(cfg.Node),
 		key:        key,
 		api:        api.New(cfg.TzKT),
 		eventsTzKT: events.NewTzKT(fmt.Sprintf("%s/v1/events", cfg.TzKT)),
@@ -111,23 +107,24 @@ func New(cfg Config) (*Tezos, error) {
 // Wallet -
 func (t *Tezos) Wallet() chain.Wallet {
 	return chain.Wallet{
-		Address: t.key.PubKey.GetAddress(),
-		Private: t.key.GetBytes(),
+		Address:   t.key.PubKey.GetAddress(),
+		PublicKey: t.key.PubKey.GetBytes(),
+		Private:   t.key.GetBytes(),
 	}
 }
 
 // Init -
 func (t *Tezos) Init() error {
 	t.log.Info().Msg("initializing...")
-	blockHead := new(rpc.BlockIDHead)
-	response, counter, err := t.rpc.ContractCounter(rpc.ContractCounterInput{
-		BlockID:    blockHead,
-		ContractID: t.key.PubKey.GetAddress(),
-	})
+	counterValue, err := t.rpc.Counter(t.key.PubKey.GetAddress(), "head")
 	if err != nil {
-		return errors.Wrap(err, string(response.Body()))
+		return errors.Wrap(err, "Counter")
 	}
-	atomic.StoreInt64(&t.counter, int64(counter))
+	counter, err := strconv.ParseInt(counterValue, 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "invalid counter")
+	}
+	atomic.StoreInt64(&t.counter, counter)
 
 	bigMaps, err := t.api.GetBigmaps(map[string]string{
 		"contract.in": strings.Join(append(t.cfg.Tokens, t.cfg.Contract), ","),
@@ -201,12 +198,12 @@ func (t *Tezos) listen() {
 			switch update.Channel {
 			case events.ChannelBigMap:
 				if err := t.handleBigMapChannel(update); err != nil {
-					t.log.Error().Err(err).Msg("handleBigMapChannel")
+					t.log.Err(err).Interface("update", update).Msg("handleBigMapChannel")
 					continue
 				}
 			case events.ChannelOperations:
 				if err := t.handleOperationsChannel(update); err != nil {
-					t.log.Error().Err(err).Msg("handleOperationsChannel")
+					t.log.Err(err).Interface("update", update).Msg("handleOperationsChannel")
 					continue
 				}
 			}
@@ -435,30 +432,19 @@ func (t *Tezos) restoreFinilizationSwap(bm api.BigMap, key api.BigMapKey) error 
 	}
 	switch len(updates) {
 	case 2:
-		var value map[string]interface{}
-		if err := json.Unmarshal(updates[0].Value, &value); err != nil {
-			return err
-		}
-		return t.handleBigMapUpdate(BigMapUpdate{
-			ID:     int64(updates[0].ID),
-			Level:  int64(updates[0].Level),
+		return t.handleBigMapUpdate(events.BigMapUpdate{
+			ID:     updates[0].ID,
+			Level:  updates[0].Level,
 			Bigmap: bm.Ptr,
-			Contract: struct {
-				Alias   string `mapstructure:"alias"`
-				Address string `mapstructure:"address"`
-			}{
+			Contract: events.Alias{
 				Address: bm.Contract.Address,
 				Alias:   bm.Contract.Alias,
 			},
-			Action: BigMapAction(updates[0].Action),
-			Content: struct {
-				Hash  string      `mapstructure:"hash"`
-				Key   string      `mapstructure:"key"`
-				Value interface{} `mapstructure:"value"`
-			}{
+			Action: updates[0].Action,
+			Content: &events.Content{
 				Hash:  key.Hash,
 				Key:   key.Key,
-				Value: value,
+				Value: updates[0].Value,
 			},
 		})
 	default:
@@ -475,6 +461,7 @@ func (t *Tezos) handleOperationsChannel(update events.Message) error {
 		return t.handleOperationsData(update)
 	case events.MessageTypeReorg:
 	case events.MessageTypeState:
+	case events.MessageTypeSubscribed:
 	}
 	return nil
 }
@@ -513,24 +500,20 @@ func (t *Tezos) handleBigMapChannel(update events.Message) error {
 }
 
 func (t *Tezos) handleBigMapData(update events.Message) error {
-	var bigMapUpdates []BigMapUpdate
-	if err := mapstructure.Decode(update.Body, &bigMapUpdates); err != nil {
-		return err
-	}
-
-	for i := range bigMapUpdates {
-		if bigMapUpdates[i].Action == BigMapActionAllocate {
+	updates := update.Body.([]events.BigMapUpdate)
+	for i := range updates {
+		if updates[i].Action == BigMapActionAllocate {
 			return nil
 		}
 
-		if err := t.handleBigMapUpdate(bigMapUpdates[i]); err != nil {
+		if err := t.handleBigMapUpdate(updates[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (t *Tezos) handleBigMapUpdate(bigMapUpdate BigMapUpdate) error {
+func (t *Tezos) handleBigMapUpdate(bigMapUpdate events.BigMapUpdate) error {
 	switch bigMapUpdate.Contract.Address {
 	case t.cfg.Contract:
 		return t.parseContractValueUpdate(bigMapUpdate)
@@ -539,9 +522,9 @@ func (t *Tezos) handleBigMapUpdate(bigMapUpdate BigMapUpdate) error {
 	}
 }
 
-func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
+func (t *Tezos) parseContractValueUpdate(bigMapUpdate events.BigMapUpdate) error {
 	var value NewAtomexValue
-	if err := mapstructure.Decode(bigMapUpdate.Content.Value, &value); err != nil {
+	if err := json.Unmarshal(bigMapUpdate.Content.Value, &value); err != nil {
 		return err
 	}
 
@@ -624,9 +607,9 @@ func (t *Tezos) parseContractValueUpdate(bigMapUpdate BigMapUpdate) error {
 	return nil
 }
 
-func (t *Tezos) parseTokensValueUpdate(bigMapUpdate BigMapUpdate) error {
+func (t *Tezos) parseTokensValueUpdate(bigMapUpdate events.BigMapUpdate) error {
 	var value AtomexTokenValue
-	if err := mapstructure.Decode(bigMapUpdate.Content.Value, &value); err != nil {
+	if err := json.Unmarshal(bigMapUpdate.Content.Value, &value); err != nil {
 		return err
 	}
 
@@ -794,42 +777,45 @@ func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
 func (t *Tezos) sendTransaction(destination, amount, storageLimit, gasLimit, fee, entrypoint string, value json.RawMessage) (string, error) {
 	atomic.AddInt64(&t.counter, 1)
 
-	blockID := blockIDHead{t.ttl}
-	response, block, err := t.rpc.Block(blockID)
+	header, err := t.rpc.Header(fmt.Sprintf("head~%s", t.ttl))
 	if err != nil {
-		return "", errors.Wrap(err, string(response.Body()))
+		return "", err
 	}
 
-	transaction := rpc.Transaction{
-		Kind:         rpc.TRANSACTION,
+	transaction := node.Transaction{
 		Source:       t.key.PubKey.GetAddress(),
-		Counter:      strconv.Itoa(int(t.counter)),
+		Counter:      fmt.Sprintf("%d", t.counter),
 		Amount:       amount,
 		StorageLimit: storageLimit,
 		GasLimit:     gasLimit,
 		Fee:          fee,
 		Destination:  destination,
-		Parameters: &rpc.Parameters{
+		Parameters: &node.Parameters{
 			Entrypoint: entrypoint,
 			Value:      &value,
 		},
 	}
 
-	encoded, err := forge.Encode(block.Hash, transaction.ToContent())
-	if err != nil {
-		return "", err
-	}
-
-	signature, err := t.key.SignHex(encoded)
-	if err != nil {
-		return "", err
-	}
-
-	response, opHash, err := t.rpc.InjectionOperation(rpc.InjectionOperationInput{
-		Operation: signature.AppendToHex(encoded),
+	encoded, err := forge.OPG(header.Hash, node.Operation{
+		Body: transaction,
+		Kind: node.KindTransaction,
 	})
 	if err != nil {
-		return "", errors.Wrap(err, string(response.Body()))
+		return "", err
+	}
+
+	msg := hex.EncodeToString(encoded)
+	signature, err := t.key.SignHex(msg)
+	if err != nil {
+		return "", err
+	}
+
+	opHash, err := t.rpc.InjectOperaiton(node.InjectOperationRequest{
+		Operation: signature.AppendToHex(msg),
+		ChainID:   header.ChainID,
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "InjectOperaiton")
 	}
 
 	return opHash, nil

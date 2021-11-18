@@ -41,8 +41,9 @@ type InitiateArgs struct {
 
 // Wallet -
 type Wallet struct {
-	Address string
-	Private []byte
+	Address   string
+	PublicKey []byte
+	Private   []byte
 }
 
 // Event -

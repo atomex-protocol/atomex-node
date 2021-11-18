@@ -39,11 +39,11 @@ type MarketMaker struct {
 	tickers           map[string]exchange.Ticker
 	synthetics        map[string]synthetic.Synthetic
 
-	ordersCounter uint64
-
 	orders     *OrdersMap
 	swaps      *SwapsMap
 	operations map[tools.OperationID]chain.Operation
+
+	activeSwaps []atomex.Swap
 
 	wg   sync.WaitGroup
 	stop chan struct{}
@@ -133,6 +133,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		swaps:             NewSwapsMap(),
 		tickers:           make(map[string]exchange.Ticker),
 		operations:        make(map[tools.OperationID]chain.Operation),
+		activeSwaps:       make([]atomex.Swap, 0),
 		stop:              make(chan struct{}, 3),
 	}, nil
 }
@@ -178,10 +179,15 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 		return errors.Wrap(err, "atomex.Connect")
 	}
 
+	// getting active swaps
+	if err := mm.getActiveSwaps(ctx); err != nil {
+		return errors.Wrap(err, "getActiveSwaps")
+	}
+
 	// init tracker
 
 	mm.wg.Add(1)
-	go mm.listenTracker()
+	go mm.listenTracker(ctx)
 
 	if err := mm.tracker.Start(); err != nil {
 		return errors.Wrap(err, "tracker.Start")
@@ -240,24 +246,40 @@ func (mm *MarketMaker) getWalletForAsset(asset types.Asset) (chain.Wallet, error
 	return mm.tracker.Wallet(asset.ChainType())
 }
 
-func (mm *MarketMaker) getReceiverWallet(symbol types.Symbol, side strategy.Side) (chain.Wallet, error) {
+func (mm *MarketMaker) getReceiverWallet(symbol types.Symbol, side strategy.Side) (Wallet, error) {
 	switch side {
 	case strategy.Ask:
-		return mm.getWalletForAsset(symbol.Quote)
+		wallet, err := mm.getWalletForAsset(symbol.Quote)
+		if err != nil {
+			return Wallet{}, err
+		}
+		return newWallet(wallet, symbol.Quote), nil
 	case strategy.Bid:
-		return mm.getWalletForAsset(symbol.Base)
+		wallet, err := mm.getWalletForAsset(symbol.Base)
+		if err != nil {
+			return Wallet{}, err
+		}
+		return newWallet(wallet, symbol.Base), nil
 	}
-	return chain.Wallet{}, errors.Errorf("unknown side: %v", side)
+	return Wallet{}, errors.Errorf("unknown side: %v", side)
 }
 
-func (mm *MarketMaker) getSenderWallet(symbol types.Symbol, side strategy.Side) (chain.Wallet, error) {
+func (mm *MarketMaker) getSenderWallet(symbol types.Symbol, side strategy.Side) (Wallet, error) {
 	switch side {
 	case strategy.Ask:
-		return mm.getWalletForAsset(symbol.Base)
+		wallet, err := mm.getWalletForAsset(symbol.Base)
+		if err != nil {
+			return Wallet{}, err
+		}
+		return newWallet(wallet, symbol.Base), nil
 	case strategy.Bid:
-		return mm.getWalletForAsset(symbol.Quote)
+		wallet, err := mm.getWalletForAsset(symbol.Base)
+		if err != nil {
+			return Wallet{}, err
+		}
+		return newWallet(wallet, symbol.Base), nil
 	}
-	return chain.Wallet{}, errors.Errorf("unknown side: %v", side)
+	return Wallet{}, errors.Errorf("unknown side: %v", side)
 }
 
 const limitForAtomexRequest = 100
@@ -302,6 +324,35 @@ func (mm *MarketMaker) initializeOrders(ctx context.Context) error {
 }
 
 func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
+
+	for i := range mm.activeSwaps {
+		if mm.activeSwaps[i].User.Status != atomex.SwapStatusInvolved || mm.activeSwaps[i].CounterParty.Status != atomex.SwapStatusInvolved {
+			continue
+		}
+
+		swap, err := mm.atomexSwapToInternal(mm.activeSwaps[i])
+		if err != nil {
+			return err
+		}
+		internalSwap := mm.swaps.LoadOrStore(swap.HashedSecret, swap)
+
+		if err := mm.restoreSecretForAtomexSwap(ctx, mm.activeSwaps[i], internalSwap); err != nil {
+			return errors.Wrap(err, "restoreSecretForAtomexSwap")
+		}
+
+		if err := mm.handleAtomexSwapUpdate(mm.activeSwaps[i]); err != nil {
+			return errors.Wrap(err, "handleAtomexSwapUpdate")
+		}
+
+		if err := mm.initiateInvolvedSwap(mm.activeSwaps[i]); err != nil {
+			return errors.Wrap(err, "initiateInvolvedSwap")
+		}
+	}
+
+	return nil
+}
+
+func (mm *MarketMaker) getActiveSwaps(ctx context.Context) error {
 	var end bool
 	for !end {
 		swapsCtx, cancelSwaps := context.WithTimeout(ctx, time.Second*5)
@@ -316,12 +367,7 @@ func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
 			return errors.Wrap(err, "atomexAPI.Swaps")
 		}
 		end = len(swaps) != limitForAtomexRequest
-
-		for i := range swaps {
-			if err := mm.handleAtomexSwapUpdate(swaps[i]); err != nil {
-				return errors.Wrap(err, "handleAtomexSwapUpdate")
-			}
-		}
+		mm.activeSwaps = append(mm.activeSwaps, swaps...)
 	}
 	return nil
 }
@@ -395,4 +441,59 @@ func (mm *MarketMaker) atomexSwapToInternal(swap atomex.Swap) (*tools.Swap, erro
 			Address:   acceptorWallet.Address,
 		},
 	}, nil
+}
+
+func (mm *MarketMaker) restoreSecretForAtomexSwap(ctx context.Context, atomexSwap atomex.Swap, internalSwap *tools.Swap) error {
+	if !atomexSwap.IsInitiator || atomexSwap.Secret != "" {
+		return nil
+	}
+
+	if len(atomexSwap.User.Trades) == 0 {
+		return nil
+	}
+
+	orderCtx, cancelCtx := context.WithTimeout(ctx, time.Second*5)
+	defer cancelCtx()
+
+	order, err := mm.atomexAPI.Order(orderCtx, atomexSwap.User.Trades[0].OrderID)
+	if err != nil {
+		return err
+	}
+
+	var cid clientOrderID
+	if err := cid.parse(order.ClientOrderID); err != nil {
+		return err
+	}
+
+	var side strategy.Side
+	switch atomexSwap.Side {
+	case atomex.SideBuy:
+		side = strategy.Bid
+	case atomex.SideSell:
+		side = strategy.Ask
+	}
+
+	symbol, ok := mm.atomexMeta.FromSymbols[atomexSwap.Symbol]
+	if !ok {
+		return errors.Errorf("unknown atomex symbol: %s", atomexSwap.Symbol)
+	}
+
+	info, ok := mm.symbols[symbol]
+	if !ok {
+		return errors.Errorf("unknown symbol: %s", symbol)
+	}
+
+	wallet, err := mm.getSenderWallet(info, side)
+	if err != nil {
+		return err
+	}
+
+	scrt, err := mm.secret(wallet.Private, wallet.Address, cid.index)
+	if err != nil {
+		return err
+	}
+
+	internalSwap.Secret = chain.Hex(scrt.Value)
+
+	return nil
 }

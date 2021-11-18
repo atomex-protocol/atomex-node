@@ -6,7 +6,7 @@ require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
-	github.com/dipdup-net/go-lib v0.1.32
+	github.com/dipdup-net/go-lib v0.1.35
 	github.com/ebellocchia/go-base58 v0.1.0
 	github.com/ethereum/go-ethereum v1.10.12
 	github.com/go-playground/validator/v10 v10.9.0
@@ -30,7 +30,6 @@ require (
 	golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa
 	golang.org/x/net v0.0.0-20210928044308-7d9f5e0b762b // indirect
 	golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 // indirect
-	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	gopkg.in/yaml.v2 v2.4.0
 )

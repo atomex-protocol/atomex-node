@@ -20,4 +20,4 @@ strategies:
     window: 60
 
 log_level: trace
-restore: false
+restore: true

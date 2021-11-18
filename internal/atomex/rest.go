@@ -112,8 +112,8 @@ func (rest *Rest) request(ctx context.Context, method string, path string, args 
 
 // Token - get authentication token
 func (rest *Rest) Token(ctx context.Context, keys *signers.Key) (response TokenResponse, err error) {
-	req := newTokenRequest(signMessage, rest.algo, keys.Public)
-	if err := req.sign(keys); err != nil {
+	req := NewTokenRequest(signMessage, rest.algo, keys.Public)
+	if err := req.Sign(keys); err != nil {
 		return response, errors.Wrap(err, "sign")
 	}
 
