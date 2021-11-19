@@ -15,3 +15,5 @@ services:
       context: .
     restart: always
     env_file: .env
+    volumes:
+      - /etc/atomex/market_maker:/etc/atomex/market_maker

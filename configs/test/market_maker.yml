@@ -2,7 +2,7 @@ quote_provider:
   kind: binance
 
 keys:
-  file: api_test.json
+  file: /etc/atomex/market_maker/api_keys.json
   kind: custom
   generate_if_not_exists: true
 
