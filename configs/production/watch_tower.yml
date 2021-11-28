@@ -1,0 +1,5 @@
+restore: true
+types:
+  - redeem
+  - refund
+retry_count_on_failed_tx: 0

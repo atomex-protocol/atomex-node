@@ -1,0 +1,16 @@
+to_symbols:
+  XTZUSDT: XTZ_USDT
+from_symbols:
+  XTZ_USDT:
+    type: direct
+    symbols:
+      - XTZUSDT
+  ETH_USDT:
+    type: direct
+    symbols:
+      - ETHUSDT
+  XTZ_ETH:
+    type: divided
+    symbols:
+      - XTZUSDT
+      - ETHUSDT

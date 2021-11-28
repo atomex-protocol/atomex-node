@@ -1,0 +1,19 @@
+rest_api: https://api.test.atomex.me/v1
+wss: wss://ws.api.test.atomex.me/ws
+
+settings:
+  reward_for_redeem: 0
+  lock_time: 3600
+
+to_symbols:
+  WBTC_tzBTC: WBTC/tzBTC
+  XTZ_USDT: XTZ/USDT
+  KUSD_USDT: KUSD/USDT
+  XTZ_ETH: XTZ/ETH
+
+from_symbols:
+  WBTC/tzBTC: WBTC_tzBTC
+  XTZ/USDT: XTZ_USDT
+  KUSD/USDT: KUSD_USDT
+  XTZ/ETH: XTZ_ETH
+  

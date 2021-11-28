@@ -1,0 +1,22 @@
+tzBTC_tez:
+  name: tzBTC
+  chain: tezos
+  contract: KT1XoWRv2cav1FFpkiLsZAj7bFHCVdfXno6Q
+  atomex_contract: KT1KHdx4EC7WNVeeTGMr8utCSRczgu2EPCzX
+  decimals: 8
+XTZ:
+  name: XTZ
+  chain: tezos
+  atomex_contract: KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J
+  decimals: 6
+ETH:
+  name: ETH
+  chain: ethereum
+  atomex_contract: 0x527d1049837EdF5f99c287a41a87702686082bF8
+  decimals: 18
+USDT:
+  name: USDT
+  chain: ethereum
+  atomex_contract: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
+  decimals: 18
+

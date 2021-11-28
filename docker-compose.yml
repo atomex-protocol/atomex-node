@@ -4,9 +4,16 @@ services:
   watch_tower:
     image: atomex-protocol/watch_tower:${TAG:-latest}
     build:
-        dockerfile: build/Dockerfile
-        context: .
-        args:
-          - config_file=config.yml
+      dockerfile: build/watch_tower/Dockerfile
+      context: .
     restart: always
     env_file: .env
+  market_maker:
+    image: atomex-protocol/market_maker:${TAG:-latest}
+    build:
+      dockerfile: build/market_maker/Dockerfile
+      context: .
+    restart: always
+    env_file: .env
+    volumes:
+      - /etc/atomex/market_maker:/etc/atomex/market_maker

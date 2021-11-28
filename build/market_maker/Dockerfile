@@ -3,13 +3,9 @@
 # ---------------------------------------------------------------------
 FROM golang:1.16-alpine as builder
 
-ENV CGO_ENABLED=0
-ENV GO111MODULE=on
-ENV GOOS=linux
-ARG config_file
+ENV AP_ENV=production
 
-RUN apk --no-cache add ca-certificates
-RUN apk add --update git
+RUN apk --no-cache add ca-certificates g++
 
 RUN mkdir -p $GOPATH/src/github.com/atomex-protocol/watch_tower/
 
@@ -17,24 +13,25 @@ COPY ./go.* $GOPATH/src/github.com/atomex-protocol/watch_tower/
 WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/
 RUN go mod download
 
-COPY cmd/watch_tower cmd/watch_tower
+COPY cmd/market_maker cmd/market_maker
 COPY internal internal
 
-WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/cmd/watch_tower/
-RUN go build -a -installsuffix cgo -o /go/bin/watch_tower .
+WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/cmd/market_maker/
+
+# enable CGO for cryptography
+RUN CGO_ENABLED=1 GO111MODULE=on GOOS=linux go build -ldflags "-linkmode external -extldflags '-static' -s -w"  -a -o /go/bin/market_maker .
 
 # ---------------------------------------------------------------------
 #  The second stage container, for running the application
 # ---------------------------------------------------------------------
 FROM scratch
 
-WORKDIR /app/watch_tower
-ENV GOPATH=$GOPATH
-ARG config_file
+WORKDIR /app/market_maker
+ENV AP_ENV=$AP_ENV
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /go/bin/watch_tower /go/bin/watch_tower
-COPY cmd/watch_tower/$config_file config.yml
-COPY cmd/watch_tower/abi/ abi/
+COPY --from=builder /go/bin/market_maker /go/bin/market_maker
+COPY assets/abi abi
+COPY configs configs
 
-ENTRYPOINT ["/go/bin/watch_tower"]
+ENTRYPOINT ["/go/bin/market_maker", "-c", "/app/market_maker/configs"]

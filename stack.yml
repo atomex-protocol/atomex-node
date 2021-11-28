@@ -5,16 +5,33 @@ services:
     image: ${DOCKER_REGISTRY:-atomex}/watch-tower
     build:
       context: .
-      dockerfile: build/Dockerfile
-      args:
-        - config_file=config.test.yml
+      dockerfile: build/watch-tower/Dockerfile
+      env:
+        - AP_ENV=test
     restart: unless-stopped
     deploy:
       mode: replicated
       replicas: 1
     secrets:
       - watch-tower
+  market-maker:
+    image: ${DOCKER_REGISTRY:-atomex}/market-maker
+    build:
+      context: .
+      dockerfile: build/market-maker/Dockerfile
+      env:
+        - AP_ENV=test
+    restart: unless-stopped
+    deploy:
+      mode: replicated
+      replicas: 1
+    secrets:
+      - market-maker
+    volumes:
+      - /etc/atomex/market_maker:/etc/atomex/market_maker
 
 secrets:
   watch-tower:
+    external: true
+  market-maker:
     external: true

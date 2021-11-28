@@ -18,12 +18,32 @@ type Chain interface {
 	io.Closer
 	Init() error
 	Run() error
+	Initiate(args InitiateArgs) error
 	Redeem(hashedSecret, secret Hex, contract string) error
 	Refund(hashedSecret Hex, contract string) error
 	Restore() error
+	Wallet() Wallet
 
 	Events() <-chan Event
 	Operations() <-chan Operation
+}
+
+// InitiateArgs -
+type InitiateArgs struct {
+	HashedSecret Hex
+	Participant  string
+	Contract     string
+	TokenAddress string
+	Amount       decimal.Decimal
+	PayOff       decimal.Decimal
+	RefundTime   time.Time
+}
+
+// Wallet -
+type Wallet struct {
+	Address   string
+	PublicKey []byte
+	Private   []byte
 }
 
 // Event -

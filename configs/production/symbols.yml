@@ -1,0 +1,6 @@
+- name: WBTC_tzBTC
+  base: WBTC_eth
+  quote: tzBTC_tez
+- name: XTZ_USDT
+  base: XTZ
+  quote: USDT

@@ -1,0 +1,26 @@
+quote_provider:
+  kind: binance
+
+keys:
+  file: api_test.json
+  kind: custom
+  generate_if_not_exists: true
+
+strategies:
+  - kind: one-by-one
+    symbol: WBTC_tzBTC
+    volume: 1
+    spread:
+      ask: 0.01
+      bid: 0.02
+  # - kind: follow
+  #   symbol: XTZ_USDT
+  #   spread: 0.01
+  # - kind: one-by-one
+  #   symbol: WETH_ETH
+  #   spread: 0.01
+  
+  # - kind: volatility
+  #   symbol: ETH_BTC
+
+log_level: trace

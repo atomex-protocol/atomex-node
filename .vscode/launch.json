@@ -12,7 +12,18 @@
             "program": "${workspaceFolder}/cmd/watch_tower",
             "args": [
                 "-c",
-                "config.test.yml"
+                "../../configs"
+            ],
+            "envFile": "${workspaceFolder}/.env"
+        }, {
+            "name": "Launch Market Maker",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/market_maker",
+            "args": [
+                "-c",
+                "../../configs"
             ],
             "envFile": "${workspaceFolder}/.env"
         }

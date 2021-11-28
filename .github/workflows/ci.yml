@@ -17,6 +17,32 @@ jobs:
         with:
           version: v1.34
           args: --timeout=2m
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
+      - name: checkout code
+        uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: golang tests
+        env:
+          GO111MODULE: on
+        run: |
+          go mod download
+          go test ./...
+      - name: docker-compose test build
+        run: |
+          touch .env
+          docker-compose -f docker-compose.yml build
   analyze:
     name: Code Analyze
     runs-on: ubuntu-latest
@@ -42,7 +68,7 @@ jobs:
     - name: Checkout the code
       uses: actions/checkout@v2
     - name: Build the Docker image
-      run: docker build . --file build/Dockerfile --tag localbuild/testimage:latest --build-arg config_file=config.test.yml
+      run: docker build . --file build/watch_tower/Dockerfile --tag localbuild/testimage:latest --build-arg config_file=config.test.yml
     - name: Run the Anchore scan action itself with GitHub Advanced Security code scanning integration enabled
       uses: anchore/scan-action@main
       with:
