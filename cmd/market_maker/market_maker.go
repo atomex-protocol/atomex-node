@@ -45,8 +45,7 @@ type MarketMaker struct {
 
 	activeSwaps []atomex.Swap
 
-	wg   sync.WaitGroup
-	stop chan struct{}
+	wg sync.WaitGroup
 }
 
 // NewMarketMaker -
@@ -134,7 +133,6 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		tickers:           make(map[string]exchange.Ticker),
 		operations:        make(map[tools.OperationID]chain.Operation),
 		activeSwaps:       make([]atomex.Swap, 0),
-		stop:              make(chan struct{}, 3),
 	}, nil
 }
 
@@ -159,7 +157,7 @@ func (mm *MarketMaker) loadKeys() (*signers.Key, error) {
 // Start -
 func (mm *MarketMaker) Start(ctx context.Context) error {
 	mm.wg.Add(1)
-	go mm.listenAtomex()
+	go mm.listenAtomex(ctx)
 
 	loadedKeys, err := mm.loadKeys()
 	if err != nil {
@@ -189,14 +187,14 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 	mm.wg.Add(1)
 	go mm.listenTracker(ctx)
 
-	if err := mm.tracker.Start(); err != nil {
+	if err := mm.tracker.Start(ctx); err != nil {
 		return errors.Wrap(err, "tracker.Start")
 	}
 
 	// init quote provider
 
 	mm.wg.Add(1)
-	go mm.listenProvider()
+	go mm.listenProvider(ctx)
 
 	providerSymbols := make([]string, 0)
 	for symbol := range mm.symbols {
@@ -219,9 +217,6 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 
 // Close -
 func (mm *MarketMaker) Close(ctx context.Context) error {
-	for i := 0; i < cap(mm.stop); i++ {
-		mm.stop <- struct{}{}
-	}
 	mm.wg.Wait()
 
 	if err := mm.provider.Close(); err != nil {
@@ -237,8 +232,6 @@ func (mm *MarketMaker) Close(ctx context.Context) error {
 	if err := mm.tracker.Close(); err != nil {
 		return err
 	}
-
-	close(mm.stop)
 	return nil
 }
 
@@ -344,7 +337,7 @@ func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
 			return errors.Wrap(err, "handleAtomexSwapUpdate")
 		}
 
-		if err := mm.initiateInvolvedSwap(mm.activeSwaps[i]); err != nil {
+		if err := mm.initiateInvolvedSwap(ctx, mm.activeSwaps[i]); err != nil {
 			return errors.Wrap(err, "initiateInvolvedSwap")
 		}
 	}

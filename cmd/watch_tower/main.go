@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"os"
+	"os/signal"
 	"path"
+	"syscall"
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/config"
@@ -20,7 +22,7 @@ func main() {
 
 	flag.Parse()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	configDir = config.SelectEnvironment(configDir)
 
@@ -36,7 +38,25 @@ func main() {
 	}
 	cfg.General = general
 
-	if err := run(cfg); err != nil {
-		log.Panic().Stack().Err(err).Msg("")
+	watchTower, err := NewWatchTower(cfg)
+	if err != nil {
+		log.Panic().Err(err).Msg("NewWatchTower")
 	}
+
+	if err := watchTower.Run(ctx, cfg.Restore); err != nil {
+		log.Panic().Err(err).Msg("Run")
+	}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	<-signals
+	cancel()
+
+	if err := watchTower.Close(); err != nil {
+		log.Panic().Err(err).Msg("Close")
+	}
+	close(signals)
+
+	log.Info().Msg("stopped")
 }

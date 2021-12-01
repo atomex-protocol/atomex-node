@@ -19,16 +19,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func (mm *MarketMaker) listenAtomex() {
+func (mm *MarketMaker) listenAtomex(ctx context.Context) {
 	defer mm.wg.Done()
 
 	for {
 		select {
-		case <-mm.stop:
+		case <-ctx.Done():
 			return
 
 		case data := <-mm.atomex.Listen():
-			if err := mm.handleAtomexUpdate(data); err != nil {
+			if err := mm.handleAtomexUpdate(ctx, data); err != nil {
 				mm.log.Err(err).Msg("handleAtomexUpdate")
 				continue
 			}
@@ -39,7 +39,7 @@ func (mm *MarketMaker) listenAtomex() {
 	}
 }
 
-func (mm *MarketMaker) handleAtomexUpdate(data atomex.Message) error {
+func (mm *MarketMaker) handleAtomexUpdate(ctx context.Context, data atomex.Message) error {
 	switch val := data.Value.(type) {
 
 	case atomex.OrderWebsocket:
@@ -56,7 +56,7 @@ func (mm *MarketMaker) handleAtomexUpdate(data atomex.Message) error {
 			return err
 		}
 
-		if err := mm.initiateInvolvedSwap(val); err != nil {
+		if err := mm.initiateInvolvedSwap(ctx, val); err != nil {
 			return err
 		}
 	}
@@ -343,7 +343,7 @@ func (mm *MarketMaker) handleAtomexSwapUpdate(swap atomex.Swap) error {
 	return nil
 }
 
-func (mm *MarketMaker) initiateInvolvedSwap(swap atomex.Swap) error {
+func (mm *MarketMaker) initiateInvolvedSwap(ctx context.Context, swap atomex.Swap) error {
 	if swap.SecretHash == "" {
 		return nil
 	}
@@ -368,7 +368,7 @@ func (mm *MarketMaker) initiateInvolvedSwap(swap atomex.Swap) error {
 	payOff := decimal.NewFromFloat(mm.atomexMeta.Settings.RewardForRedeem)
 	refundTime := swap.TimeStamp.Add(time.Duration(swap.User.Requisites.LockTime) * time.Second)
 
-	return mm.tracker.Initiate(chain.InitiateArgs{
+	return mm.tracker.Initiate(ctx, chain.InitiateArgs{
 		HashedSecret: chain.Hex(swap.User.Requisites.SecretHash),
 		Participant:  swap.CounterParty.Requisites.ReceivingAddress,
 		Contract:     asset.AtomexContract,
