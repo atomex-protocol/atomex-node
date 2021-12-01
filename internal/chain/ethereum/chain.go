@@ -50,7 +50,6 @@ type Ethereum struct {
 	head       chan *types.Header
 	events     chan chain.Event
 	operations chan chain.Operation
-	stop       chan struct{}
 	wg         sync.WaitGroup
 }
 
@@ -110,7 +109,6 @@ func New(cfg Config) (*Ethereum, error) {
 		head:          make(chan *types.Header, 16),
 		events:        make(chan chain.Event, 1024),
 		operations:    make(chan chain.Operation, 1024),
-		stop:          make(chan struct{}, 1),
 	}
 
 	if err := initKeystore(&eth); err != nil {
@@ -147,10 +145,11 @@ func (e *Ethereum) Wallet() chain.Wallet {
 }
 
 // Init -
-func (e *Ethereum) Init() error {
+func (e *Ethereum) Init(ctx context.Context) error {
 	e.log.Info().Msg("initializing...")
-
-	chainID, err := e.client.NetworkID(context.Background())
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	chainID, err := e.client.NetworkID(reqCtx)
 	if err != nil {
 		return err
 	}
@@ -160,25 +159,28 @@ func (e *Ethereum) Init() error {
 }
 
 // Run -
-func (e *Ethereum) Run() error {
+func (e *Ethereum) Run(ctx context.Context) error {
 	e.log.Info().Msg("running...")
-	latest, err := e.client.BlockNumber(context.Background())
+
+	blockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	latest, err := e.client.BlockNumber(blockCtx)
 	if err != nil {
 		return err
 	}
 	e.latest = int64(latest)
 
-	if err := e.subscribe(); err != nil {
+	if err := e.subscribe(ctx); err != nil {
 		return errors.Wrap(err, "subscribe")
 	}
 
 	e.wg.Add(1)
-	go e.listen()
+	go e.listen(ctx)
 
 	return nil
 }
 
-func (e *Ethereum) subscribe() error {
+func (e *Ethereum) subscribe(ctx context.Context) error {
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{
 			e.ethContract,
@@ -186,14 +188,17 @@ func (e *Ethereum) subscribe() error {
 		},
 		FromBlock: big.NewInt(e.latest),
 	}
-
-	subLogs, err := e.wss.SubscribeFilterLogs(context.Background(), query, e.logs)
+	filterCtx, filterCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer filterCancel()
+	subLogs, err := e.wss.SubscribeFilterLogs(filterCtx, query, e.logs)
 	if err != nil {
 		return err
 	}
 	e.subLogs = subLogs
 
-	subHead, err := e.wss.SubscribeNewHead(context.Background(), e.head)
+	headCtx, headCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer headCancel()
+	subHead, err := e.wss.SubscribeNewHead(headCtx, e.head)
 	if err != nil {
 		return err
 	}
@@ -201,13 +206,13 @@ func (e *Ethereum) subscribe() error {
 	return nil
 }
 
-func (e *Ethereum) reconnect() error {
+func (e *Ethereum) reconnect(ctx context.Context) error {
 	wss, err := ethclient.Dial(e.cfg.WssURL)
 	if err != nil {
 		return errors.Wrap(err, "reconnect Dial")
 	}
 	e.wss = wss
-	if err := e.subscribe(); err != nil {
+	if err := e.subscribe(ctx); err != nil {
 		return errors.Wrap(err, "reconnect subscribe")
 	}
 	return nil
@@ -216,7 +221,6 @@ func (e *Ethereum) reconnect() error {
 // Close -
 func (e *Ethereum) Close() error {
 	e.log.Info().Msg("closing...")
-	e.stop <- struct{}{}
 	e.wg.Wait()
 
 	if e.subLogs != nil {
@@ -236,7 +240,6 @@ func (e *Ethereum) Close() error {
 	close(e.head)
 	close(e.events)
 	close(e.operations)
-	close(e.stop)
 	return nil
 }
 
@@ -251,10 +254,10 @@ func (e *Ethereum) Operations() <-chan chain.Operation {
 }
 
 // Initiate -
-func (e *Ethereum) Initiate(args chain.InitiateArgs) error {
+func (e *Ethereum) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 	e.log.Info().Str("hashed_secret", args.HashedSecret.String()).Msg("initiate")
 
-	opts, err := e.buildTxOpts()
+	opts, err := e.buildTxOpts(ctx)
 	if err != nil {
 		return err
 	}
@@ -289,10 +292,10 @@ func (e *Ethereum) Initiate(args chain.InitiateArgs) error {
 }
 
 // Redeem -
-func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error {
+func (e *Ethereum) Redeem(ctx context.Context, hashedSecret, secret chain.Hex, contract string) error {
 	e.log.Info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("redeem")
 
-	opts, err := e.buildTxOpts()
+	opts, err := e.buildTxOpts(ctx)
 	if err != nil {
 		return err
 	}
@@ -331,10 +334,10 @@ func (e *Ethereum) Redeem(hashedSecret, secret chain.Hex, contract string) error
 }
 
 // Refund -
-func (e *Ethereum) Refund(hashedSecret chain.Hex, contract string) error {
+func (e *Ethereum) Refund(ctx context.Context, hashedSecret chain.Hex, contract string) error {
 	e.log.Info().Str("hashed_secret", hashedSecret.String()).Str("contract", contract).Msg("refund")
 
-	opts, err := e.buildTxOpts()
+	opts, err := e.buildTxOpts(ctx)
 	if err != nil {
 		return err
 	}
@@ -367,18 +370,22 @@ func (e *Ethereum) Refund(hashedSecret chain.Hex, contract string) error {
 	return nil
 }
 
-func (e *Ethereum) buildTxOpts() (*bind.TransactOpts, error) {
+func (e *Ethereum) buildTxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	auth, err := bind.NewKeyedTransactorWithChainID(e.privateKey, e.chainID)
 	if err != nil {
 		return nil, err
 	}
 
-	gasPrice, err := e.client.SuggestGasPrice(context.Background())
+	gasCtx, gasCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer gasCancel()
+	gasPrice, err := e.client.SuggestGasPrice(gasCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	nonce, err := e.client.PendingNonceAt(context.Background(), e.address)
+	nonceCtx, nonceCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer nonceCancel()
+	nonce, err := e.client.PendingNonceAt(nonceCtx, e.address)
 	if err != nil {
 		return nil, err
 	}
@@ -388,6 +395,7 @@ func (e *Ethereum) buildTxOpts() (*bind.TransactOpts, error) {
 	auth.Value = big.NewInt(0)
 	auth.GasLimit = uint64(300000)
 	auth.GasPrice = gasPrice
+	auth.Context = ctx
 	return auth, nil
 }
 
@@ -567,12 +575,12 @@ func (e *Ethereum) parseLogForContract(abi *abi.ABI, typ string, l types.Log) er
 	return nil
 }
 
-func (e *Ethereum) listen() {
+func (e *Ethereum) listen(ctx context.Context) {
 	defer e.wg.Done()
 
 	for {
 		select {
-		case <-e.stop:
+		case <-ctx.Done():
 			return
 		case l := <-e.logs:
 			if err := e.parseLog(l); err != nil {
@@ -585,14 +593,14 @@ func (e *Ethereum) listen() {
 		case err := <-e.subLogs.Err():
 			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
-				if err := e.reconnect(); err != nil {
+				if err := e.reconnect(ctx); err != nil {
 					e.log.Error().Err(err).Msg("")
 				}
 			}
 		case err := <-e.subHead.Err():
 			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
-				if err := e.reconnect(); err != nil {
+				if err := e.reconnect(ctx); err != nil {
 					e.log.Error().Err(err).Msg("")
 				}
 			}

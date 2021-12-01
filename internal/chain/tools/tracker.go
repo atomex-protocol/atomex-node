@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -25,7 +26,6 @@ type Tracker struct {
 	swaps         map[chain.Hex]*Swap
 	statusChanged chan Swap
 	operations    chan chain.Operation
-	stop          chan struct{}
 
 	wg sync.WaitGroup
 }
@@ -65,7 +65,6 @@ func NewTracker(cfg Config, opts ...TrackerOption) (*Tracker, error) {
 		swaps:         make(map[chain.Hex]*Swap),
 		operations:    make(chan chain.Operation, 1024),
 		statusChanged: make(chan Swap, 1024),
-		stop:          make(chan struct{}, 1),
 	}
 	for i := range opts {
 		opts[i](t)
@@ -85,7 +84,6 @@ func (t *Tracker) Operations() <-chan chain.Operation {
 
 // Close -
 func (t *Tracker) Close() error {
-	t.stop <- struct{}{}
 	t.wg.Wait()
 
 	if err := t.eth.Close(); err != nil {
@@ -95,46 +93,45 @@ func (t *Tracker) Close() error {
 		return err
 	}
 
-	close(t.stop)
 	close(t.operations)
 	close(t.statusChanged)
 	return nil
 }
 
 // Start -
-func (t *Tracker) Start() error {
-	if err := t.tezos.Init(); err != nil {
+func (t *Tracker) Start(ctx context.Context) error {
+	if err := t.tezos.Init(ctx); err != nil {
 		return err
 	}
 
-	if err := t.eth.Init(); err != nil {
+	if err := t.eth.Init(ctx); err != nil {
 		return err
 	}
 
 	t.wg.Add(1)
-	go t.listen()
+	go t.listen(ctx)
 
 	if t.needRestore {
-		if err := t.restore(); err != nil {
+		if err := t.restore(ctx); err != nil {
 			return err
 		}
 	} else {
 		t.restoreCounter = chainsCount
 	}
 
-	if err := t.tezos.Run(); err != nil {
+	if err := t.tezos.Run(ctx); err != nil {
 		return err
 	}
 
-	if err := t.eth.Run(); err != nil {
+	if err := t.eth.Run(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (t *Tracker) restore() error {
-	if err := t.tezos.Restore(); err != nil {
+func (t *Tracker) restore(ctx context.Context) error {
+	if err := t.tezos.Restore(ctx); err != nil {
 		return err
 	}
 
@@ -145,12 +142,12 @@ func (t *Tracker) restore() error {
 	return nil
 }
 
-func (t *Tracker) listen() {
+func (t *Tracker) listen(ctx context.Context) {
 	defer t.wg.Done()
 
 	for {
 		select {
-		case <-t.stop:
+		case <-ctx.Done():
 			return
 
 		// Tezos
@@ -222,14 +219,14 @@ func (t *Tracker) getSwap(event chain.Event) *Swap {
 }
 
 // Redeem -
-func (t *Tracker) Redeem(swap Swap, leg Leg) error {
+func (t *Tracker) Redeem(ctx context.Context, swap Swap, leg Leg) error {
 	switch leg.ChainType {
 	case chain.ChainTypeEthereum:
-		if err := t.eth.Redeem(swap.HashedSecret, swap.Secret, leg.Contract); err != nil {
+		if err := t.eth.Redeem(ctx, swap.HashedSecret, swap.Secret, leg.Contract); err != nil {
 			return err
 		}
 	case chain.ChainTypeTezos:
-		if err := t.tezos.Redeem(swap.HashedSecret, swap.Secret, leg.Contract); err != nil {
+		if err := t.tezos.Redeem(ctx, swap.HashedSecret, swap.Secret, leg.Contract); err != nil {
 			return err
 		}
 	default:
@@ -239,14 +236,14 @@ func (t *Tracker) Redeem(swap Swap, leg Leg) error {
 }
 
 // Redeem -
-func (t *Tracker) Refund(swap Swap, leg Leg) error {
+func (t *Tracker) Refund(ctx context.Context, swap Swap, leg Leg) error {
 	switch leg.ChainType {
 	case chain.ChainTypeEthereum:
-		if err := t.eth.Refund(swap.HashedSecret, leg.Contract); err != nil {
+		if err := t.eth.Refund(ctx, swap.HashedSecret, leg.Contract); err != nil {
 			return err
 		}
 	case chain.ChainTypeTezos:
-		if err := t.tezos.Refund(swap.HashedSecret, leg.Contract); err != nil {
+		if err := t.tezos.Refund(ctx, swap.HashedSecret, leg.Contract); err != nil {
 			return err
 		}
 	default:
@@ -256,14 +253,14 @@ func (t *Tracker) Refund(swap Swap, leg Leg) error {
 }
 
 // Initiate -
-func (t *Tracker) Initiate(args chain.InitiateArgs, chainType chain.ChainType) error {
+func (t *Tracker) Initiate(ctx context.Context, args chain.InitiateArgs, chainType chain.ChainType) error {
 	switch chainType {
 	case chain.ChainTypeEthereum:
-		if err := t.eth.Initiate(args); err != nil {
+		if err := t.eth.Initiate(ctx, args); err != nil {
 			return err
 		}
 	case chain.ChainTypeTezos:
-		if err := t.tezos.Initiate(args); err != nil {
+		if err := t.tezos.Initiate(ctx, args); err != nil {
 			return err
 		}
 	default:

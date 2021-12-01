@@ -1,7 +1,9 @@
 package chain
 
 import (
+	"context"
 	"io"
+	"math/big"
 	"time"
 
 	"github.com/pkg/errors"
@@ -16,12 +18,12 @@ var (
 // Chain -
 type Chain interface {
 	io.Closer
-	Init() error
-	Run() error
-	Initiate(args InitiateArgs) error
-	Redeem(hashedSecret, secret Hex, contract string) error
-	Refund(hashedSecret Hex, contract string) error
-	Restore() error
+	Init(ctx context.Context) error
+	Run(ctx context.Context) error
+	Initiate(ctx context.Context, args InitiateArgs) error
+	Redeem(ctx context.Context, hashedSecret, secret Hex, contract string) error
+	Refund(ctx context.Context, hashedSecret Hex, contract string) error
+	Restore(ctx context.Context) error
 	Wallet() Wallet
 
 	Events() <-chan Event
@@ -144,22 +146,9 @@ func (e InitEvent) HashedSecret() Hex {
 	return e.HashedSecretHex
 }
 
-// SetAmountFromString -
-func (event *InitEvent) SetAmountFromString(amount string) error {
-	amountDecimal, err := decimal.NewFromString(amount)
-	if err != nil {
-		return err
-	}
-	event.Amount = amountDecimal
-	return nil
-}
-
-// SetAmountFromString -
-func (event *InitEvent) SetPayOff(payoff string, minPayoff decimal.Decimal) error {
-	payoffDecimal, err := decimal.NewFromString(payoff)
-	if err != nil {
-		return err
-	}
+// SetPayOff -
+func (event *InitEvent) SetPayOff(payoff *big.Int, minPayoff decimal.Decimal) error {
+	payoffDecimal := decimal.NewFromBigInt(payoff, 0)
 	if minPayoff.Cmp(payoffDecimal) > 0 {
 		return ErrMinPayoff
 	}

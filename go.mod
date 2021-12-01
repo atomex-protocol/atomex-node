@@ -6,7 +6,7 @@ require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
-	github.com/dipdup-net/go-lib v0.1.35
+	github.com/dipdup-net/go-lib v0.1.41
 	github.com/ebellocchia/go-base58 v0.1.0
 	github.com/ethereum/go-ethereum v1.10.12
 	github.com/go-playground/validator/v10 v10.9.0
@@ -16,7 +16,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2
 	github.com/json-iterator/go v1.1.12
-	github.com/mitchellh/mapstructure v1.4.2
+	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/rs/zerolog v1.25.0
