@@ -13,7 +13,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 	for {
 		select {
-		case <-mm.stop:
+		case <-ctx.Done():
 			return
 
 		case operation := <-mm.tracker.Operations():
@@ -43,7 +43,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 					continue
 				}
 
-				if err := mm.tracker.Redeem(*current, current.Acceptor); err != nil {
+				if err := mm.tracker.Redeem(ctx, *current, current.Acceptor); err != nil {
 					mm.log.Err(err).Msg("tracker.Redeem")
 					continue
 				}
@@ -60,7 +60,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 					continue
 				}
 
-				if err := mm.tracker.Refund(*current, current.Initiator); err != nil {
+				if err := mm.tracker.Refund(ctx, *current, current.Initiator); err != nil {
 					mm.log.Err(err).Msg("tracker.Refund")
 					continue
 				}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -21,7 +22,6 @@ type WatchTower struct {
 	retryCount uint
 
 	stopped bool
-	stop    chan struct{}
 	wg      sync.WaitGroup
 }
 
@@ -42,7 +42,6 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 		retryCount: cfg.RetryCountOnFailedTx,
 		operations: make(map[tools.OperationID]chain.Operation),
 		swaps:      make(map[chain.Hex]*Swap),
-		stop:       make(chan struct{}, 1),
 	}
 
 	for i := range cfg.Types {
@@ -58,11 +57,11 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 }
 
 // Run -
-func (wt *WatchTower) Run(restore bool) error {
+func (wt *WatchTower) Run(ctx context.Context, restore bool) error {
 	wt.wg.Add(1)
-	go wt.listen()
+	go wt.listen(ctx)
 
-	if err := wt.tracker.Start(); err != nil {
+	if err := wt.tracker.Start(ctx); err != nil {
 		return err
 	}
 
@@ -71,7 +70,6 @@ func (wt *WatchTower) Run(restore bool) error {
 
 // Close -
 func (wt *WatchTower) Close() error {
-	wt.stop <- struct{}{}
 	wt.stopped = true
 	wt.wg.Wait()
 
@@ -79,11 +77,10 @@ func (wt *WatchTower) Close() error {
 		return err
 	}
 
-	close(wt.stop)
 	return nil
 }
 
-func (wt *WatchTower) listen() {
+func (wt *WatchTower) listen(ctx context.Context) {
 	defer wt.wg.Done()
 
 	ticker := time.NewTicker(time.Second * 30)
@@ -91,7 +88,7 @@ func (wt *WatchTower) listen() {
 
 	for {
 		select {
-		case <-wt.stop:
+		case <-ctx.Done():
 			return
 
 		// Tracker
@@ -104,22 +101,22 @@ func (wt *WatchTower) listen() {
 				wt.swaps[swap.HashedSecret] = s
 			}
 
-			if err := wt.onSwap(s); err != nil {
+			if err := wt.onSwap(ctx, s); err != nil {
 				log.Err(err).Msg("onSwap")
 			}
 		case operation := <-wt.tracker.Operations():
-			if err := wt.onOperation(operation); err != nil {
+			if err := wt.onOperation(ctx, operation); err != nil {
 				log.Err(err).Msg("onOperation")
 			}
 
 		// Manager channels
 		case <-ticker.C:
-			wt.checkRefundTime()
+			wt.checkRefundTime(ctx)
 		}
 	}
 }
 
-func (wt *WatchTower) onSwap(swap *Swap) error {
+func (wt *WatchTower) onSwap(ctx context.Context, swap *Swap) error {
 	if swap.RetryCount >= wt.retryCount {
 		delete(wt.swaps, swap.HashedSecret)
 		log.Info().Str("hashed_secret", swap.HashedSecret.String()).Msg("swap retry count transaction exceeded")
@@ -129,7 +126,7 @@ func (wt *WatchTower) onSwap(swap *Swap) error {
 	switch swap.Status {
 	case tools.StatusRedeemedOnce:
 		if wt.needRedeem {
-			if err := wt.redeem(swap); err != nil {
+			if err := wt.redeem(ctx, swap); err != nil {
 				return err
 			}
 		}
@@ -141,7 +138,7 @@ func (wt *WatchTower) onSwap(swap *Swap) error {
 	return nil
 }
 
-func (wt *WatchTower) checkRefundTime() {
+func (wt *WatchTower) checkRefundTime(ctx context.Context) {
 	if !wt.needRefund {
 		return
 	}
@@ -155,7 +152,7 @@ func (wt *WatchTower) checkRefundTime() {
 		}
 
 		if swap.RefundTime.UTC().Before(time.Now().UTC()) {
-			if err := wt.refund(swap); err != nil {
+			if err := wt.refund(ctx, swap); err != nil {
 				log.Err(err).Msg("refund")
 				continue
 			}
@@ -164,33 +161,33 @@ func (wt *WatchTower) checkRefundTime() {
 	}
 }
 
-func (wt *WatchTower) redeem(swap *Swap) error {
+func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
 	if leg := swap.Leg(); leg != nil {
 		swap.RetryCount++
-		return wt.tracker.Redeem(swap.Swap, *leg)
+		return wt.tracker.Redeem(ctx, swap.Swap, *leg)
 	}
 
 	return nil
 }
 
-func (wt *WatchTower) refund(swap *Swap) error {
+func (wt *WatchTower) refund(ctx context.Context, swap *Swap) error {
 	if leg := swap.Leg(); leg != nil {
 		swap.RetryCount++
-		return wt.tracker.Refund(swap.Swap, *leg)
+		return wt.tracker.Refund(ctx, swap.Swap, *leg)
 	}
 
 	if swap.Acceptor.Status == tools.StatusInitiated && swap.Initiator.Status == tools.StatusInitiated {
 		swap.RetryCount++
-		if err := wt.tracker.Refund(swap.Swap, swap.Initiator); err != nil {
+		if err := wt.tracker.Refund(ctx, swap.Swap, swap.Initiator); err != nil {
 			return err
 		}
-		return wt.tracker.Refund(swap.Swap, swap.Acceptor)
+		return wt.tracker.Refund(ctx, swap.Swap, swap.Acceptor)
 	}
 
 	return nil
 }
 
-func (wt *WatchTower) onOperation(operation chain.Operation) error {
+func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation) error {
 	id := tools.OperationID{
 		Hash:  operation.Hash,
 		Chain: operation.ChainType,
@@ -211,7 +208,7 @@ func (wt *WatchTower) onOperation(operation chain.Operation) error {
 			delete(wt.operations, id)
 
 			if swap, ok := wt.swaps[old.HashedSecret]; ok {
-				return wt.onSwap(swap)
+				return wt.onSwap(ctx, swap)
 			}
 		}
 	}

@@ -22,7 +22,7 @@ func main() {
 
 	flag.Parse()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	configDir = config.SelectEnvironment(configDir)
 
@@ -63,6 +63,7 @@ func main() {
 	}
 
 	<-signals
+	cancel()
 
 	if err := marketMaker.Close(ctx); err != nil {
 		log.Panic().Err(err).Msg("marketMaker.Close")

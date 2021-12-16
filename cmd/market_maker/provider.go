@@ -1,11 +1,13 @@
 package main
 
-func (mm *MarketMaker) listenProvider() {
+import "context"
+
+func (mm *MarketMaker) listenProvider(ctx context.Context) {
 	defer mm.wg.Done()
 
 	for {
 		select {
-		case <-mm.stop:
+		case <-ctx.Done():
 			return
 
 		case tick := <-mm.provider.Tickers():
