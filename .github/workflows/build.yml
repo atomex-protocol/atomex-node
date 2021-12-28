@@ -1,0 +1,69 @@
+name: Build
+on:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - 'master'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      DOCKER_REGISTRY: ghcr.io
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to the registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Watch Tower
+
+      - name: Watch Tower image tags & labels
+        id: meta-watch-tower
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/atomex-protocol/watch-tower
+
+      - name: Watch Tower image build & push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: build/watch_tower/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta-watch-tower.outputs.tags }}
+          labels: ${{ steps.meta-watch-tower.outputs.labels }}
+
+      # Market Maker
+
+      - name: Market Maker image tags & labels
+        id: meta-market-maker
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/atomex-protocol/market-maker
+
+      - name: Market Maker
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: build/market_maker/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta-market-maker.outputs.tags }}
+          labels: ${{ steps.meta-market-maker.outputs.labels }}
