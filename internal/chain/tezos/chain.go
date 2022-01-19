@@ -279,16 +279,20 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 			Entrypoint: "initiate",
 		},
 	}
+	hashed, err := args.HashedSecret.Bytes()
+	if err != nil {
+		return err
+	}
 
 	var value []byte
-	var err error
 	switch args.Contract {
 	case t.cfg.Contract:
 		tx.Amount = args.Amount.String()
+
 		value, err = t.tezContract.BuildInitiateParameters(ctx, atomextez.InitiateParameters{
 			Participant: tezgen.Address(args.Participant),
 			Settings: atomextez.Settings{
-				HashedSecret: tezgen.Bytes(args.HashedSecret),
+				HashedSecret: tezgen.Bytes(hashed),
 				RefundTime:   tezgen.NewTimestamp(args.RefundTime),
 				Payoff:       tezgen.NewInt(args.PayOff.BigInt().Int64()),
 			},
@@ -302,7 +306,7 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 		value, err = contract.BuildInitiateParameters(ctx, atomexteztoken.Initiate{
 			TokenAddress: tezgen.Address(args.TokenAddress),
 			Participant:  tezgen.Address(args.Participant),
-			HashedSecret: tezgen.Bytes(args.HashedSecret),
+			HashedSecret: tezgen.Bytes(hashed),
 			RefundTime:   tezgen.NewTimestamp(args.RefundTime),
 			PayoffAmount: tezgen.NewInt(args.PayOff.BigInt().Int64()),
 			TotalAmount:  tezgen.NewInt(args.Amount.BigInt().Int64()),
