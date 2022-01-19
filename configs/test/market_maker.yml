@@ -19,5 +19,5 @@ strategies:
     width: 1.5
     window: 60
 
-log_level: trace
+log_level: info
 restore: true

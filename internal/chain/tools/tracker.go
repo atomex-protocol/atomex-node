@@ -40,6 +40,7 @@ func NewTracker(cfg Config, opts ...TrackerOption) (*Tracker, error) {
 		MinPayOff:       cfg.Tezos.MinPayOff,
 		TTL:             cfg.Tezos.TTL,
 		OperaitonParams: cfg.Tezos.OperaitonParams,
+		LogLevel:        zerolog.InfoLevel,
 	})
 	if err != nil {
 		return nil, err
@@ -51,6 +52,7 @@ func NewTracker(cfg Config, opts ...TrackerOption) (*Tracker, error) {
 		NodeURL:       cfg.Ethereum.Node,
 		WssURL:        cfg.Ethereum.Wss,
 		MinPayOff:     cfg.Ethereum.MinPayOff,
+		LogLevel:      zerolog.InfoLevel,
 	})
 	if err != nil {
 		return nil, err

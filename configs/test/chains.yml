@@ -1,6 +1,6 @@
 tezos:
-  node: https://rpc.tzkt.io/granadanet
-  tzkt: https://api.granadanet.tzkt.io
+  node: https://rpc.tzkt.io/hangzhou2net
+  tzkt: https://api.hangzhou2net.tzkt.io
   ttl: 60
   min_payoff: "0"
 

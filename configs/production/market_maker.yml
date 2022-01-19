@@ -23,4 +23,4 @@ strategies:
   # - kind: volatility
   #   symbol: ETH_BTC
 
-log_level: trace
+log_level: info

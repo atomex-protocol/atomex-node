@@ -10,10 +10,10 @@ import (
 type Initiate struct {
 	HashedSecret tezgen.Bytes     `json:"hashedSecret" validate:"string"`
 	Participant  tezgen.Address   `json:"participant" validate:"string"`
-	PayoffAmount tezgen.Int       `json:"payoffAmount" validate:"string"`
+	PayoffAmount tezgen.Int       `json:"payoffAmount,string" validate:"string"`
 	RefundTime   tezgen.Timestamp `json:"refundTime" validate:"string"`
 	TokenAddress tezgen.Address   `json:"tokenAddress" validate:"string"`
-	TotalAmount  tezgen.Int       `json:"totalAmount" validate:"string"`
+	TotalAmount  tezgen.Int       `json:"totalAmount,string" validate:"string"`
 }
 
 // Redeem
@@ -29,10 +29,10 @@ type Key0 tezgen.Bytes
 type Value0 struct {
 	Initiator    tezgen.Address   `json:"initiator" validate:"string"`
 	Participant  tezgen.Address   `json:"participant" validate:"string"`
-	PayoffAmount tezgen.Int       `json:"payoffAmount" validate:"string"`
+	PayoffAmount tezgen.Int       `json:"payoffAmount,string" validate:"string"`
 	RefundTime   tezgen.Timestamp `json:"refundTime" validate:"string"`
 	TokenAddress tezgen.Address   `json:"tokenAddress" validate:"string"`
-	TotalAmount  tezgen.Int       `json:"totalAmount" validate:"string"`
+	TotalAmount  tezgen.Int       `json:"totalAmount,string" validate:"string"`
 }
 
 // BigMap0
