@@ -42,8 +42,18 @@ type KeyBigMap tezgen.Bytes
 
 // ValueBigMap
 type ValueBigMap struct {
+	Recepients Recepients          `json:"recepients"`
+	Settings   SettingsValueBigMap `json:"settings"`
+}
+
+// Recepients 
+type Recepients struct {
 	Initiator   tezgen.Address   `json:"initiator" validate:"string"`
 	Participant tezgen.Address   `json:"participant" validate:"string"`
+}
+
+// Settings -
+type SettingsValueBigMap struct {
 	Amount      tezgen.Int       `json:"amount" validate:"string"`
 	RefundTime  tezgen.Timestamp `json:"refund_time" validate:"string"`
 	Payoff      tezgen.Int       `json:"payoff" validate:"string"`

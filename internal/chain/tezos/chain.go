@@ -520,13 +520,13 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 			Chain:           chain.ChainTypeTezos,
 			ContractAddress: update.Contract,
 			BlockNumber:     uint64(update.Level),
-			Initiator:       string(update.BigMap.Value.Initiator),
-			Participant:     string(update.BigMap.Value.Participant),
-			RefundTime:      update.BigMap.Value.RefundTime.Value(),
-			Amount:          decimal.NewFromBigInt(update.BigMap.Value.Amount.Int, 0),
+			Initiator:       string(update.BigMap.Value.Recepients.Initiator),
+			Participant:     string(update.BigMap.Value.Recepients.Participant),
+			RefundTime:      update.BigMap.Value.Settings.RefundTime.Value(),
+			Amount:          decimal.NewFromBigInt(update.BigMap.Value.Settings.Amount.Int, 0),
 		}
 
-		if err := event.SetPayOff(update.BigMap.Value.Payoff.Int, t.minPayoff); err != nil {
+		if err := event.SetPayOff(update.BigMap.Value.Settings.Payoff.Int, t.minPayoff); err != nil {
 			if errors.Is(err, chain.ErrMinPayoff) {
 				t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 				return nil
@@ -670,13 +670,13 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 		Chain:           chain.ChainTypeTezos,
 		ContractAddress: contract,
 		BlockNumber:     uint64(key.FirstLevel),
-		Initiator:       string(value.Initiator),
-		Participant:     string(value.Participant),
-		RefundTime:      value.RefundTime.Value(),
-		Amount:          decimal.NewFromBigInt(value.Amount.Int, 0),
+		Initiator:       string(value.Recepients.Initiator),
+		Participant:     string(value.Recepients.Participant),
+		RefundTime:      value.Settings.RefundTime.Value(),
+		Amount:          decimal.NewFromBigInt(value.Settings.Amount.Int, 0),
 	}
 
-	if err := event.SetPayOff(value.Payoff.Int, t.minPayoff); err != nil {
+	if err := event.SetPayOff(value.Settings.Payoff.Int, t.minPayoff); err != nil {
 		if errors.Is(err, chain.ErrMinPayoff) {
 			t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
 			return nil
