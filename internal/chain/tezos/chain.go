@@ -579,7 +579,7 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 }
 
 func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomexteztoken.BigMap0Update) error {
-	hashedSecret := chain.NewHexFromBytes(update.BigMap0.Key)
+	hashedSecret := chain.Hex(update.BigMap0.Key)
 
 	switch update.Action {
 	case BigMapActionAddKey:
