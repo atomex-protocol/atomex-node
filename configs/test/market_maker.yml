@@ -12,7 +12,7 @@ strategies:
     spread:
       ask: 0.03
       bid: 0.05
-    volume: 0.01
+    volume: 0.5
     dist:
       min: 0.001
       max: 0.006
