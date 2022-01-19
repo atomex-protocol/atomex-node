@@ -14,6 +14,20 @@ type Initiate struct {
 	Payoff       tezgen.Int       `json:"payoff" validate:"string"`
 }
 
+
+// Initiate
+type InitiateParameters struct {
+	Participant  tezgen.Address   `json:"participant" validate:"string"`
+	Settings 	 Settings 		  `json:"settings"`
+}
+
+// Settings -
+type Settings struct {
+	HashedSecret tezgen.Bytes     `json:"hashed_secret" validate:"string"`
+	RefundTime   tezgen.Timestamp `json:"refund_time" validate:"string"`
+	Payoff       tezgen.Int       `json:"payoff" validate:"string"`
+}
+
 // Add
 type Add tezgen.Bytes
 

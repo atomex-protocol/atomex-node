@@ -286,11 +286,13 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 	switch args.Contract {
 	case t.cfg.Contract:
 		tx.Amount = args.Amount.String()
-		value, err = t.tezContract.BuildInitiateParameters(ctx, atomextez.Initiate{
-			Participant:  tezgen.Address(args.Participant),
-			HashedSecret: tezgen.Bytes(args.HashedSecret),
-			RefundTime:   tezgen.NewTimestamp(args.RefundTime),
-			Payoff:       tezgen.NewInt(args.PayOff.BigInt().Int64()),
+		value, err = t.tezContract.BuildInitiateParameters(ctx, atomextez.InitiateParameters{
+			Participant: tezgen.Address(args.Participant),
+			Settings: atomextez.Settings{
+				HashedSecret: tezgen.Bytes(args.HashedSecret),
+				RefundTime:   tezgen.NewTimestamp(args.RefundTime),
+				Payoff:       tezgen.NewInt(args.PayOff.BigInt().Int64()),
+			},
 		})
 
 	default:

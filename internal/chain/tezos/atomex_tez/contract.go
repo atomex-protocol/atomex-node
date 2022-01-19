@@ -377,7 +377,7 @@ func (contract *Atomextez) BuildAddParameters(ctx context.Context, params Add) (
 }
    
 // BuildInitiateParameters - build `initiate` parameters
-func (contract *Atomextez) BuildInitiateParameters(ctx context.Context, params Initiate) ([]byte, error) {
+func (contract *Atomextez) BuildInitiateParameters(ctx context.Context, params InitiateParameters) ([]byte, error) {
 	return contract.tzktAPI.BuildContractParameters(ctx, contract.address, "initiate", params)
 }
    
