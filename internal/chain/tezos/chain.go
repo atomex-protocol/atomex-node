@@ -270,7 +270,6 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 
 	tx := node.Transaction{
 		Source:       t.key.PubKey.GetAddress(),
-		Counter:      fmt.Sprintf("%d", t.counter),
 		StorageLimit: operationParams.StorageLimit.Initiate,
 		GasLimit:     operationParams.GasLimit.Initiate,
 		Fee:          "1000",
@@ -351,7 +350,6 @@ func (t *Tezos) Redeem(ctx context.Context, hashedSecret, secret chain.Hex, cont
 	params := json.RawMessage(value)
 	opHash, err := t.sendTransaction(ctx, node.Transaction{
 		Source:       t.key.PubKey.GetAddress(),
-		Counter:      fmt.Sprintf("%d", t.counter),
 		Amount:       "0",
 		StorageLimit: operationParams.StorageLimit.Redeem,
 		GasLimit:     operationParams.GasLimit.Redeem,
@@ -393,7 +391,6 @@ func (t *Tezos) Refund(ctx context.Context, hashedSecret chain.Hex, contract str
 	params := json.RawMessage(value)
 	opHash, err := t.sendTransaction(ctx, node.Transaction{
 		Source:       t.key.PubKey.GetAddress(),
-		Counter:      fmt.Sprintf("%d", t.counter),
 		Amount:       "0",
 		StorageLimit: operationParams.StorageLimit.Refund,
 		GasLimit:     operationParams.GasLimit.Refund,
@@ -718,6 +715,7 @@ func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
 
 func (t *Tezos) sendTransaction(ctx context.Context, transaction node.Transaction) (string, error) {
 	atomic.AddInt64(&t.counter, 1)
+	transaction.Counter = fmt.Sprintf("%d", t.counter)
 
 	headerCtx, headerCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer headerCancel()
