@@ -13,7 +13,7 @@ func LoadSecret(name string) (string, error) {
 		return secret, nil
 	}
 
-	f, err := os.Open("/run/secrets/watch-tower")
+	f, err := os.Open("/run/secrets/atomex-node")
 	if err != nil {
 		return "", err
 	}
