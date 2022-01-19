@@ -289,7 +289,7 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 	case t.cfg.Contract:
 		tx.Amount = args.Amount.String()
 
-		value, err = t.tezContract.BuildInitiateParameters(ctx, atomextez.InitiateParameters{
+		value, err = t.tezContract.BuildInitiateParameters(ctx, atomextez.Initiate{
 			Participant: tezgen.Address(args.Participant),
 			Settings: atomextez.Settings{
 				HashedSecret: tezgen.Bytes(hashed),
@@ -520,8 +520,8 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 			Chain:           chain.ChainTypeTezos,
 			ContractAddress: update.Contract,
 			BlockNumber:     uint64(update.Level),
-			Initiator:       string(update.BigMap.Value.Recepients.Initiator),
-			Participant:     string(update.BigMap.Value.Recepients.Participant),
+			Initiator:       string(update.BigMap.Value.Recipients.Initiator),
+			Participant:     string(update.BigMap.Value.Recipients.Participant),
 			RefundTime:      update.BigMap.Value.Settings.RefundTime.Value(),
 			Amount:          decimal.NewFromBigInt(update.BigMap.Value.Settings.Amount.Int, 0),
 		}
@@ -670,8 +670,8 @@ func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error
 		Chain:           chain.ChainTypeTezos,
 		ContractAddress: contract,
 		BlockNumber:     uint64(key.FirstLevel),
-		Initiator:       string(value.Recepients.Initiator),
-		Participant:     string(value.Recepients.Participant),
+		Initiator:       string(value.Recipients.Initiator),
+		Participant:     string(value.Recipients.Participant),
 		RefundTime:      value.Settings.RefundTime.Value(),
 		Amount:          decimal.NewFromBigInt(value.Settings.Amount.Int, 0),
 	}

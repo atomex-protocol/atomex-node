@@ -78,7 +78,7 @@ func New(baseURL string) *Atomextez  {
 	return &Atomextez {
 		tzktAPI: api.New(baseURL),
 		tzktEvents: events.NewTzKT(fmt.Sprintf("%s/v1/events", baseURL)),
-		address: "KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J",
+		address: "KT1BpYoX7rGtEJp2gvtdLWGsfb3UriymcnHN",
 		add: make(chan AddTx, 1024),
 		initiate: make(chan InitiateTx, 1024),
 		redeem: make(chan RedeemTx, 1024),
@@ -364,7 +364,7 @@ func getTransactions(ctx context.Context, tzktAPI *api.API, entrypoint, contract
 	})
 }
 
-// GetStorage - get `KT1GyzWoSh9A2ACr1wQpBoGHiDrjT4oHJT2J` current storage
+// GetStorage - get `KT1BpYoX7rGtEJp2gvtdLWGsfb3UriymcnHN` current storage
 func (contract *Atomextez) GetStorage(ctx context.Context) (Storage, error) {
 	var storage Storage
 	err := contract.tzktAPI.GetContractStorage(ctx, contract.address, &storage)
@@ -377,7 +377,7 @@ func (contract *Atomextez) BuildAddParameters(ctx context.Context, params Add) (
 }
    
 // BuildInitiateParameters - build `initiate` parameters
-func (contract *Atomextez) BuildInitiateParameters(ctx context.Context, params InitiateParameters) ([]byte, error) {
+func (contract *Atomextez) BuildInitiateParameters(ctx context.Context, params Initiate) ([]byte, error) {
 	return contract.tzktAPI.BuildContractParameters(ctx, contract.address, "initiate", params)
 }
    

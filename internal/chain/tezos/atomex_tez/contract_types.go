@@ -8,24 +8,15 @@ import (
 
 // Initiate
 type Initiate struct {
-	Participant  tezgen.Address   `json:"participant" validate:"string"`
-	HashedSecret tezgen.Bytes     `json:"hashed_secret" validate:"string"`
-	RefundTime   tezgen.Timestamp `json:"refund_time" validate:"string"`
-	Payoff       tezgen.Int       `json:"payoff" validate:"string"`
+	Settings    Settings       `json:"settings" validate:"string"`
+	Participant tezgen.Address `json:"participant" validate:"string"`
 }
 
-
-// Initiate
-type InitiateParameters struct {
-	Participant  tezgen.Address   `json:"participant" validate:"string"`
-	Settings 	 Settings 		  `json:"settings"`
-}
-
-// Settings -
+// Settings
 type Settings struct {
-	HashedSecret tezgen.Bytes     `json:"hashed_secret" validate:"string"`
 	RefundTime   tezgen.Timestamp `json:"refund_time" validate:"string"`
 	Payoff       tezgen.Int       `json:"payoff" validate:"string"`
+	HashedSecret tezgen.Bytes     `json:"hashed_secret" validate:"string"`
 }
 
 // Add
@@ -42,21 +33,21 @@ type KeyBigMap tezgen.Bytes
 
 // ValueBigMap
 type ValueBigMap struct {
-	Recepients Recepients          `json:"recepients"`
-	Settings   SettingsValueBigMap `json:"settings"`
+	Recipients Recipients `json:"recipients" validate:"string"`
+	Settings   Settings1  `json:"settings" validate:"string"`
 }
 
-// Recepients 
-type Recepients struct {
-	Initiator   tezgen.Address   `json:"initiator" validate:"string"`
-	Participant tezgen.Address   `json:"participant" validate:"string"`
+// Recipients
+type Recipients struct {
+	Participant tezgen.Address `json:"participant" validate:"string"`
+	Initiator   tezgen.Address `json:"initiator" validate:"string"`
 }
 
-// Settings -
-type SettingsValueBigMap struct {
-	Amount      tezgen.Int       `json:"amount" validate:"string"`
-	RefundTime  tezgen.Timestamp `json:"refund_time" validate:"string"`
-	Payoff      tezgen.Int       `json:"payoff" validate:"string"`
+// Settings1
+type Settings1 struct {
+	Amount     tezgen.Int       `json:"amount" validate:"string"`
+	RefundTime tezgen.Timestamp `json:"refund_time" validate:"string"`
+	Payoff     tezgen.Int       `json:"payoff" validate:"string"`
 }
 
 // BigMap
