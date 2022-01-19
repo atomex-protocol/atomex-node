@@ -357,7 +357,7 @@ func (t *Tezos) Redeem(ctx context.Context, hashedSecret, secret chain.Hex, cont
 		Amount:       "0",
 		StorageLimit: operationParams.StorageLimit.Redeem,
 		GasLimit:     operationParams.GasLimit.Redeem,
-		Fee:          "1000",
+		Fee:          "3000",
 		Destination:  contract,
 		Parameters: &node.Parameters{
 			Entrypoint: "redeem",
@@ -398,7 +398,7 @@ func (t *Tezos) Refund(ctx context.Context, hashedSecret chain.Hex, contract str
 		Amount:       "0",
 		StorageLimit: operationParams.StorageLimit.Refund,
 		GasLimit:     operationParams.GasLimit.Refund,
-		Fee:          "1000",
+		Fee:          "10000",
 		Destination:  contract,
 		Parameters: &node.Parameters{
 			Entrypoint: "refund",
@@ -458,10 +458,6 @@ func (t *Tezos) restoreFromBigMap(ctx context.Context, bm api.BigMap) error {
 		}
 
 		for i := range keys {
-			if err := t.handleBigMapKey(keys[i], bm.Contract.Address); err != nil {
-				return err
-			}
-
 			if err := t.restoreFinilizationSwap(ctx, bm, keys[i]); err != nil {
 				return err
 			}
@@ -474,49 +470,50 @@ func (t *Tezos) restoreFromBigMap(ctx context.Context, bm api.BigMap) error {
 }
 
 func (t *Tezos) restoreFinilizationSwap(ctx context.Context, bm api.BigMap, key api.BigMapKey) error {
-	updates, err := t.api.GetBigmapKeyUpdates(ctx, uint64(bm.Ptr), key.Key, map[string]string{
-		"sort.desc": "id",
-	})
+	updates, err := t.api.GetBigmapKeyUpdates(ctx, uint64(bm.Ptr), key.Key, nil)
 	if err != nil {
 		return err
 	}
-	switch len(updates) {
-	case 2:
 
+	for i := range updates {
 		if t.cfg.Contract == bm.Contract.Address {
 			var bmUpdate atomextez.BigMapUpdate
-			if err := json.Unmarshal(updates[0].Value, &bmUpdate.BigMap.Value); err != nil {
+			if err := json.Unmarshal(updates[i].Value, &bmUpdate.BigMap.Value); err != nil {
 				return err
 			}
 			bmUpdate.BigMap.Key = atomextez.KeyBigMap(key.Key)
 			bmUpdate.BigMap.Ptr = &bm.Ptr
-			bmUpdate.Action = updates[0].Action
+			bmUpdate.Action = updates[i].Action
 			bmUpdate.Contract = bm.Contract.Address
-			bmUpdate.Level = updates[0].Level
-			return t.parseTezosContractUpdate(ctx, bmUpdate)
+			bmUpdate.Level = updates[i].Level
+			if err := t.parseTezosContractUpdate(ctx, bmUpdate); err != nil {
+				return err
+			}
 		} else {
 			var bmUpdate atomexteztoken.BigMap0Update
-			if err := json.Unmarshal(updates[0].Value, &bmUpdate.BigMap0.Value); err != nil {
+			if err := json.Unmarshal(updates[i].Value, &bmUpdate.BigMap0.Value); err != nil {
 				return err
 			}
 			bmUpdate.BigMap0.Key = atomexteztoken.Key0(key.Key)
 			bmUpdate.BigMap0.Ptr = &bm.Ptr
-			bmUpdate.Action = updates[0].Action
+			bmUpdate.Action = updates[i].Action
 			bmUpdate.Contract = bm.Contract.Address
-			bmUpdate.Level = updates[0].Level
-			return t.parseTokenContractUpdate(ctx, bmUpdate)
+			bmUpdate.Level = updates[i].Level
+			if err := t.parseTokenContractUpdate(ctx, bmUpdate); err != nil {
+				return err
+			}
 		}
-
-	default:
-		return nil
 	}
+	return nil
 }
 
 func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.BigMapUpdate) error {
+	hashedSecret := chain.NewHexFromBytes(update.BigMap.Key)
+
 	switch update.Action {
 	case BigMapActionAddKey:
 		event := chain.InitEvent{
-			HashedSecretHex: chain.Hex(update.BigMap.Key),
+			HashedSecretHex: hashedSecret,
 			Chain:           chain.ChainTypeTezos,
 			ContractAddress: update.Contract,
 			BlockNumber:     uint64(update.Level),
@@ -559,7 +556,7 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 				}
 
 				t.events <- chain.RedeemEvent{
-					HashedSecretHex: chain.Hex(update.BigMap.Key),
+					HashedSecretHex: hashedSecret,
 					Chain:           chain.ChainTypeTezos,
 					ContractAddress: update.Contract,
 					BlockNumber:     update.Level,
@@ -568,7 +565,7 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 				return nil
 			case atomextez.EntrypointRefund:
 				t.events <- chain.RefundEvent{
-					HashedSecretHex: chain.Hex(update.BigMap.Key),
+					HashedSecretHex: hashedSecret,
 					Chain:           chain.ChainTypeTezos,
 					ContractAddress: update.Contract,
 					BlockNumber:     update.Level,
@@ -582,10 +579,12 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 }
 
 func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomexteztoken.BigMap0Update) error {
+	hashedSecret := chain.NewHexFromBytes(update.BigMap0.Key)
+
 	switch update.Action {
 	case BigMapActionAddKey:
 		event := chain.InitEvent{
-			HashedSecretHex: chain.Hex(update.BigMap0.Key),
+			HashedSecretHex: hashedSecret,
 			Chain:           chain.ChainTypeTezos,
 			ContractAddress: update.Contract,
 			BlockNumber:     update.Level,
@@ -628,7 +627,7 @@ func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomextezto
 				}
 
 				t.events <- chain.RedeemEvent{
-					HashedSecretHex: chain.Hex(update.BigMap0.Key),
+					HashedSecretHex: hashedSecret,
 					Chain:           chain.ChainTypeTezos,
 					ContractAddress: update.Contract,
 					BlockNumber:     update.Level,
@@ -637,7 +636,7 @@ func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomextezto
 				return nil
 			case atomexteztoken.EntrypointRefund:
 				t.events <- chain.RefundEvent{
-					HashedSecretHex: chain.Hex(update.BigMap0.Key),
+					HashedSecretHex: hashedSecret,
 					Chain:           chain.ChainTypeTezos,
 					ContractAddress: update.Contract,
 					BlockNumber:     update.Level,
@@ -650,83 +649,16 @@ func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomextezto
 	return nil
 }
 
-func (t *Tezos) handleBigMapKey(key api.BigMapKey, contract string) error {
-	switch contract {
-	case t.cfg.Contract:
-		return t.parseContractValueKeys(key, contract)
-	default:
-		return t.parseTokensValueKeys(key, contract)
-	}
-}
-
-func (t *Tezos) parseContractValueKeys(key api.BigMapKey, contract string) error {
-	var value atomextez.ValueBigMap
-	if err := json.Unmarshal(key.Value, &value); err != nil {
-		return err
-	}
-
-	event := chain.InitEvent{
-		HashedSecretHex: chain.Hex(key.Key),
-		Chain:           chain.ChainTypeTezos,
-		ContractAddress: contract,
-		BlockNumber:     uint64(key.FirstLevel),
-		Initiator:       string(value.Recipients.Initiator),
-		Participant:     string(value.Recipients.Participant),
-		RefundTime:      value.Settings.RefundTime.Value(),
-		Amount:          decimal.NewFromBigInt(value.Settings.Amount.Int, 0),
-	}
-
-	if err := event.SetPayOff(value.Settings.Payoff.Int, t.minPayoff); err != nil {
-		if errors.Is(err, chain.ErrMinPayoff) {
-			t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
-			return nil
-		}
-		return err
-	}
-
-	t.events <- event
-	return nil
-}
-
-func (t *Tezos) parseTokensValueKeys(key api.BigMapKey, contract string) error {
-	var value atomexteztoken.Value0
-	if err := json.Unmarshal(key.Value, &value); err != nil {
-		return err
-	}
-
-	event := chain.InitEvent{
-		HashedSecretHex: chain.Hex(key.Key),
-		Chain:           chain.ChainTypeTezos,
-		ContractAddress: contract,
-		BlockNumber:     uint64(key.FirstLevel),
-		Initiator:       string(value.Initiator),
-		Participant:     string(value.Participant),
-		RefundTime:      value.RefundTime.Value(),
-		Amount:          decimal.NewFromBigInt(value.TotalAmount.Int, 0),
-	}
-
-	if err := event.SetPayOff(value.PayoffAmount.Int, t.minPayoff); err != nil {
-		if errors.Is(err, chain.ErrMinPayoff) {
-			t.log.Warn().Str("hashed_secret", event.HashedSecretHex.String()).Msg("skip because of small pay off")
-			return nil
-		}
-		return err
-	}
-
-	t.events <- event
-	return nil
-}
-
 func (t *Tezos) sendTransaction(ctx context.Context, transaction node.Transaction) (string, error) {
-	atomic.AddInt64(&t.counter, 1)
-	transaction.Counter = fmt.Sprintf("%d", t.counter)
-
 	headerCtx, headerCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer headerCancel()
 	header, err := t.rpc.Header(fmt.Sprintf("head~%s", t.ttl), node.WithContext(headerCtx))
 	if err != nil {
 		return "", err
 	}
+
+	atomic.AddInt64(&t.counter, 1)
+	transaction.Counter = fmt.Sprintf("%d", t.counter)
 
 	encoded, err := forge.OPG(header.Hash, node.Operation{
 		Body: transaction,
@@ -744,13 +676,8 @@ func (t *Tezos) sendTransaction(ctx context.Context, transaction node.Transactio
 
 	injectCtx, injectCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer injectCancel()
-	opHash, err := t.rpc.InjectOperaiton(node.InjectOperationRequest{
+	return t.rpc.InjectOperaiton(node.InjectOperationRequest{
 		Operation: signature.AppendToHex(msg),
 		ChainID:   header.ChainID,
 	}, node.WithContext(injectCtx))
-	if err != nil {
-		return "", errors.Wrap(err, "InjectOperaiton")
-	}
-
-	return opHash, nil
 }

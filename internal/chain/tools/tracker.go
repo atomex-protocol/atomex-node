@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/chain/ethereum"
@@ -178,6 +179,7 @@ func (t *Tracker) onEvent(event chain.Event) {
 	case chain.RestoredEvent:
 		t.logger.Info().Str("blockchain", e.Chain.String()).Msg("restored")
 		atomic.AddInt32(&t.restoreCounter, 1)
+		time.Sleep(2 * time.Second)
 
 		if t.restoreCounter == chainsCount {
 			for id := range t.swaps {

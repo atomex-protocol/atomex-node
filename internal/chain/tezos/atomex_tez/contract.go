@@ -3,6 +3,7 @@ package atomextez
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strconv"
@@ -167,8 +168,8 @@ func (contract *Atomextez) listen(ctx context.Context) {
 					for i := range items {
 						switch items[i].Path {
 						case "big_map":
-							var key KeyBigMap
-							if err := json.Unmarshal([]byte(items[i].Content.Key), &key); err != nil {
+							key, err := hex.DecodeString(items[i].Content.Key)
+							if err != nil {
 								log.Println(err)
 								continue
 							}
