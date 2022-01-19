@@ -43,6 +43,11 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 					continue
 				}
 
+				if current.Secret == "" {
+					mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
+					continue
+				}
+
 				if err := mm.tracker.Redeem(ctx, *current, current.Acceptor); err != nil {
 					mm.log.Err(err).Msg("tracker.Redeem")
 					continue
@@ -57,6 +62,10 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 				if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
 					mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+					continue
+				}
+				if current.Secret == "" {
+					mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
 					continue
 				}
 
