@@ -43,6 +43,9 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 		operations: make(map[tools.OperationID]chain.Operation),
 		swaps:      make(map[chain.Hex]*Swap),
 	}
+	if wt.retryCount == 0 {
+		wt.retryCount = 3
+	}
 
 	for i := range cfg.Types {
 		switch cfg.Types[i] {
@@ -99,6 +102,8 @@ func (wt *WatchTower) listen(ctx context.Context) {
 			if !ok {
 				s = &Swap{swap, 0}
 				wt.swaps[swap.HashedSecret] = s
+			} else {
+				s.Swap = swap
 			}
 
 			if err := wt.onSwap(ctx, s); err != nil {
