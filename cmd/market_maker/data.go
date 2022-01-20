@@ -209,3 +209,38 @@ type Wallet struct {
 func newWallet(wallet chain.Wallet, asset types.Asset) Wallet {
 	return Wallet{wallet, asset.Name}
 }
+
+// Secrets -
+type Secrets struct {
+	m  map[chain.Hex]chain.Hex
+	mx sync.RWMutex
+}
+
+// NewSecrets -
+func NewSecrets() *Secrets {
+	return &Secrets{
+		m: make(map[chain.Hex]chain.Hex),
+	}
+}
+
+// Get -
+func (s *Secrets) Get(hash chain.Hex) (chain.Hex, bool) {
+	s.mx.RLock()
+	secret, ok := s.m[hash]
+	s.mx.RUnlock()
+	return secret, ok
+}
+
+// Add -
+func (s *Secrets) Add(hash, secret chain.Hex) {
+	s.mx.Lock()
+	s.m[hash] = secret
+	s.mx.Unlock()
+}
+
+// Delete -
+func (s *Secrets) Delete(hash chain.Hex) {
+	s.mx.Lock()
+	delete(s.m, hash)
+	s.mx.Unlock()
+}

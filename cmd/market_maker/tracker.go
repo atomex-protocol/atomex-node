@@ -26,8 +26,9 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 			current := mm.swaps.LoadOrStore(swap.HashedSecret, &swap)
 			current.Status = swap.Status
-			current.Acceptor.Status = swap.Acceptor.Status
-			current.Initiator.Status = swap.Initiator.Status
+			current.Acceptor.Merge(swap.Acceptor)
+			current.Initiator.Merge(swap.Initiator)
+
 			if current.Secret.IsEmpty() {
 				current.Secret = swap.Secret
 			}
@@ -41,13 +42,18 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("swap is initiated. redeeming...")
 
 				if current.Secret.IsEmpty() {
-					if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
-						mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
-						continue
-					}
-					if current.Secret.IsEmpty() {
-						mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
-						continue
+					secret, ok := mm.secrets.Get(current.HashedSecret)
+					if !ok {
+						if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+							mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+							continue
+						}
+						if current.Secret.IsEmpty() {
+							mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
+							continue
+						}
+					} else {
+						current.Secret = secret
 					}
 				}
 
@@ -64,13 +70,18 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("counterparty refunded swap. refunding...")
 
 				if current.Secret.IsEmpty() {
-					if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
-						mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
-						continue
-					}
-					if current.Secret.IsEmpty() {
-						mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
-						continue
+					secret, ok := mm.secrets.Get(current.HashedSecret)
+					if !ok {
+						if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+							mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+							continue
+						}
+						if current.Secret.IsEmpty() {
+							mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
+							continue
+						}
+					} else {
+						current.Secret = secret
 					}
 				}
 
@@ -81,6 +92,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 			case tools.StatusRefunded, tools.StatusRedeemed:
 				mm.swaps.Delete(current.HashedSecret)
+				mm.secrets.Delete(current.HashedSecret)
 			}
 
 		}

@@ -393,7 +393,7 @@ func (e *Ethereum) buildTxOpts(ctx context.Context) (*bind.TransactOpts, error) 
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	auth.Value = big.NewInt(0)
-	auth.GasLimit = uint64(300000)
+	auth.GasLimit = uint64(400000)
 	auth.GasPrice = gasPrice
 	auth.Context = ctx
 	return auth, nil

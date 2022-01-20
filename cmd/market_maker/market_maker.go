@@ -41,6 +41,7 @@ type MarketMaker struct {
 
 	orders     *OrdersMap
 	swaps      *SwapsMap
+	secrets    *Secrets
 	operations map[tools.OperationID]chain.Operation
 
 	activeSwaps []atomex.Swap
@@ -119,7 +120,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		atomex:   atomexExchange,
 		atomexAPI: atomex.NewRest(
 			atomex.WithURL(cfg.General.Atomex.RestAPI),
-			atomex.WithSignatureAlgorithm(signers.AlgorithmBlake2bWithEcdsaSecp256k1),
+			atomex.WithSignatureAlgorithm(signers.AlgorithmEd25519Blake2b),
 		),
 		tracker:           track,
 		strategies:        strategies,
@@ -130,6 +131,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		quoteProviderMeta: cfg.QuoteProviderMeta,
 		orders:            NewOrdersMap(),
 		swaps:             NewSwapsMap(),
+		secrets:           NewSecrets(),
 		tickers:           make(map[string]exchange.Ticker),
 		operations:        make(map[tools.OperationID]chain.Operation),
 		activeSwaps:       make([]atomex.Swap, 0),
@@ -486,6 +488,7 @@ func (mm *MarketMaker) restoreSecretForAtomexSwap(ctx context.Context, atomexSwa
 		return err
 	}
 
+	mm.secrets.Add(chain.Hex(scrt.Hash), chain.Hex(scrt.Value))
 	internalSwap.Secret = chain.Hex(scrt.Value)
 
 	return nil

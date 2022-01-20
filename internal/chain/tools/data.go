@@ -123,6 +123,22 @@ func (leg Leg) IsFinished() bool {
 	return leg.Status == StatusRedeemed || leg.Status == StatusRefunded
 }
 
+// Merge -
+func (leg *Leg) Merge(another Leg) {
+	if leg.ChainType != another.ChainType {
+		return
+	}
+	if leg.Status < another.Status {
+		leg.Status = another.Status
+	}
+	if leg.Contract == "" {
+		leg.Contract = another.Contract
+	}
+	if leg.Address == "" {
+		leg.Address = another.Address
+	}
+}
+
 // Status -
 type Status int
 

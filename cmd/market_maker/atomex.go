@@ -187,6 +187,8 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 		return errors.Wrap(err, "secret")
 	}
 
+	mm.secrets.Add(chain.Hex(scrt.Hash), chain.Hex(scrt.Value))
+
 	req := atomex.NewTokenRequest(sender.Address, signers.AlgorithmEd25519Blake2b, sender.PublicKey)
 	if err := req.Sign(&signers.Key{
 		Public:  sender.PublicKey,
@@ -278,6 +280,7 @@ func (mm *MarketMaker) findDuplicatesOrders(orders []atomex.Order) error {
 			}); err != nil {
 				return errors.Wrap(err, "atomex.CancelOrder")
 			}
+			mm.secrets.Delete(chain.Hex(order.Secret.Hash))
 		} else {
 			internalOrder := atomexOrderToInternal(orders[i])
 			mm.orders.Store(cid, &internalOrder)
@@ -302,6 +305,8 @@ func (mm *MarketMaker) cancelAll(ctx context.Context) (cancelErr error) {
 			cancelErr = err
 			return false
 		}
+
+		mm.swaps.Delete(chain.Hex(order.Secret.Hash))
 
 		if response.Result {
 			mm.log.Debug().Int64("order_id", order.ID).Str("symbol", order.Symbol).Msg("cancelled")
@@ -395,6 +400,7 @@ func (mm *MarketMaker) handleAtomexOrderUpdate(order atomex.OrderWebsocket) erro
 	switch order.Status {
 	case atomex.OrderStatusCanceled, atomex.OrderStatusRejected:
 		mm.orders.Delete(cid)
+		mm.swaps.Delete(chain.Hex(internalOrder.Secret.Hash))
 
 	case atomex.OrderStatusFilled, atomex.OrderStatusPartiallyFilled: // do not handle. it's because it's handled in `handleAtomexSwapUpdate`
 	case atomex.OrderStatusPending: // do not handle. it's internal atomex status.
