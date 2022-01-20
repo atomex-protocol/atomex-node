@@ -339,7 +339,7 @@ func (mm *MarketMaker) handleAtomexSwapUpdate(swap atomex.Swap) error {
 		return errors.Wrap(err, "atomexSwapToInternal")
 	}
 
-	mm.swaps.LoadOrStore(chain.Hex(swap.SecretHash), s)
+	mm.swaps.Store(chain.Hex(swap.SecretHash), s)
 	return nil
 }
 

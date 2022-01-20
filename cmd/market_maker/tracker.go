@@ -28,7 +28,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 			current.Status = swap.Status
 			current.Acceptor.Status = swap.Acceptor.Status
 			current.Initiator.Status = swap.Initiator.Status
-			if len(current.Secret) == 0 {
+			if current.Secret.IsEmpty() {
 				current.Secret = swap.Secret
 			}
 
@@ -40,14 +40,15 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("swap is initiated. redeeming...")
 
-				if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
-					mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
-					continue
-				}
-
-				if len(current.Secret) == 0 {
-					mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
-					continue
+				if current.Secret.IsEmpty() {
+					if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+						mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+						continue
+					}
+					if current.Secret.IsEmpty() {
+						mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
+						continue
+					}
 				}
 
 				if err := mm.tracker.Redeem(ctx, *current, current.Acceptor); err != nil {
@@ -62,13 +63,15 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("counterparty refunded swap. refunding...")
 
-				if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
-					mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
-					continue
-				}
-				if len(current.Secret) == 0 {
-					mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
-					continue
+				if current.Secret.IsEmpty() {
+					if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+						mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
+						continue
+					}
+					if current.Secret.IsEmpty() {
+						mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
+						continue
+					}
 				}
 
 				if err := mm.tracker.Refund(ctx, *current, current.Initiator); err != nil {

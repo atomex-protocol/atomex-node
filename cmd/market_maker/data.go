@@ -97,14 +97,14 @@ func (swaps *SwapsMap) Load(hashedSecret chain.Hex) (*tools.Swap, bool) {
 	return val, ok
 }
 
-// Set -
+// Store -
 func (swaps *SwapsMap) Store(hashedSecret chain.Hex, swap *tools.Swap) {
 	swaps.mx.Lock()
 	swaps.m[hashedSecret] = swap
 	swaps.mx.Unlock()
 }
 
-// Load -
+// LoadOrStore -
 func (swaps *SwapsMap) LoadOrStore(hashedSecret chain.Hex, swap *tools.Swap) *tools.Swap {
 	val, ok := swaps.Load(hashedSecret)
 	if ok {
