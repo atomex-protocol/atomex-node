@@ -29,3 +29,11 @@ func (swap *Swap) Leg() *tools.Leg {
 	}
 	return nil
 }
+
+func (swap *Swap) merge(update tools.Swap) {
+	if update.HashedSecret.String() != swap.HashedSecret.String() || update.Status < swap.Status {
+		return
+	}
+
+	swap.Swap = update
+}

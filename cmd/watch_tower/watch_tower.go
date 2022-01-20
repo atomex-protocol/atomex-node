@@ -103,7 +103,7 @@ func (wt *WatchTower) listen(ctx context.Context) {
 				s = &Swap{swap, 0}
 				wt.swaps[swap.HashedSecret] = s
 			} else {
-				s.Swap = swap
+				s.merge(swap)
 			}
 
 			if err := wt.onSwap(ctx, s); err != nil {
