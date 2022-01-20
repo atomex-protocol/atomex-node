@@ -28,7 +28,9 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 			current.Status = swap.Status
 			current.Acceptor.Status = swap.Acceptor.Status
 			current.Initiator.Status = swap.Initiator.Status
-			current.Secret = swap.Secret
+			if len(current.Secret) == 0 {
+				current.Secret = swap.Secret
+			}
 
 			switch current.Status {
 			case tools.StatusInitiated:
@@ -43,7 +45,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 					continue
 				}
 
-				if current.Secret == "" {
+				if len(current.Secret) == 0 {
 					mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
 					continue
 				}
@@ -64,7 +66,7 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 					mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
 					continue
 				}
-				if current.Secret == "" {
+				if len(current.Secret) == 0 {
 					mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
 					continue
 				}
