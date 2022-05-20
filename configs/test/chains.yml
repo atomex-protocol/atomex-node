@@ -1,6 +1,6 @@
 tezos:
-  node: https://rpc.tzkt.io/hangzhou2net
-  tzkt: https://api.hangzhou2net.tzkt.io
+  node: https://rpc.tzkt.io/ithacanet
+  tzkt: https://api.ithacanet.tzkt.io
   ttl: 60
   min_payoff: "0"
 
