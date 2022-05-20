@@ -28,12 +28,13 @@ func (ma *MovingAverage) Full() bool {
 
 // Add -
 func (ma *MovingAverage) Add(value decimal.Decimal) {
-	if len(ma.values) == 0 {
+	switch {
+	case len(ma.values) == 0:
 		ma.min = value
 		ma.max = value
-	} else if value.LessThan(ma.min) {
+	case value.LessThan(ma.min):
 		ma.min = value
-	} else if value.GreaterThan(ma.max) {
+	case value.GreaterThan(ma.max):
 		ma.max = value
 	}
 

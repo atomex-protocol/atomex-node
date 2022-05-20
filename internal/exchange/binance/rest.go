@@ -71,7 +71,7 @@ func getLimitInterval(limit RateLimit) *rate.Limiter {
 	default:
 		return nil
 	}
-	return rate.NewLimiter(rate.Every(duration*time.Duration(limit.IntervalNum)), int(limit.Limit))
+	return rate.NewLimiter(rate.Every(duration*time.Duration(limit.IntervalNum)), limit.Limit)
 }
 
 func (rest *Rest) request(isPrivate bool, method, path string, args url.Values, body url.Values, weight int, output interface{}) error {

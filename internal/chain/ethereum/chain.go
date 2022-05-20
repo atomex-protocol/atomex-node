@@ -410,11 +410,11 @@ func (e *Ethereum) Restore() error {
 	if err != nil {
 		return err
 	}
-	events := append(ethEvents, erc20Events...)
-	sort.Sort(chain.ByLevel(events))
+	ethEvents = append(ethEvents, erc20Events...)
+	sort.Sort(chain.ByLevel(ethEvents))
 
-	for i := range events {
-		e.events <- events[i]
+	for i := range ethEvents {
+		e.events <- ethEvents[i]
 	}
 	e.events <- chain.RestoredEvent{Chain: chain.ChainTypeEthereum}
 	return nil

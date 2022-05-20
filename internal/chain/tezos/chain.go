@@ -520,7 +520,7 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 			HashedSecretHex: hashedSecret,
 			Chain:           chain.ChainTypeTezos,
 			ContractAddress: update.Contract,
-			BlockNumber:     uint64(update.Level),
+			BlockNumber:     update.Level,
 			Initiator:       string(update.BigMap.Value.Recipients.Initiator),
 			Participant:     string(update.BigMap.Value.Recipients.Participant),
 			RefundTime:      update.BigMap.Value.Settings.RefundTime.Value(),

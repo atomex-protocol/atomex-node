@@ -115,6 +115,8 @@ func (b *Binance) listen() {
 					Bid:       typ.Bid,
 					BidVolume: typ.BidQuantity,
 				}
+			default:
+				continue
 			}
 		}
 	}
