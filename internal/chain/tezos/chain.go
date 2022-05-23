@@ -44,6 +44,9 @@ type Tezos struct {
 	events     chan chain.Event
 	operations chan chain.Operation
 
+	transactionsMutex sync.Mutex
+	transactions      map[chain.Hex]node.Transaction
+
 	wg sync.WaitGroup
 }
 
@@ -100,6 +103,7 @@ func New(cfg Config) (*Tezos, error) {
 		log:           logger.New(logger.WithLogLevel(cfg.LogLevel), logger.WithModuleName("tezos")),
 		events:        make(chan chain.Event, 1024*16),
 		operations:    make(chan chain.Operation, 1024),
+		transactions:  make(map[chain.Hex]node.Transaction),
 	}
 
 	tez.tezContract.ChangeAddress(cfg.Contract)
@@ -148,6 +152,9 @@ func (t *Tezos) Run(ctx context.Context) error {
 	t.log.Info().Msg("running...")
 
 	t.wg.Add(1)
+	go t.sendTransactions(ctx)
+
+	t.wg.Add(1)
 	go t.listenTezosContract(ctx)
 
 	for _, contract := range t.tokenContract {
@@ -180,6 +187,24 @@ func (t *Tezos) Events() <-chan chain.Event {
 // Operations -
 func (t *Tezos) Operations() <-chan chain.Operation {
 	return t.operations
+}
+
+func (t *Tezos) sendTransactions(ctx context.Context) {
+	defer t.wg.Done()
+
+	ticker := time.NewTicker(time.Second * 30)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := t.send(ctx); err != nil {
+				t.log.Err(err).Msg("send")
+			}
+		}
+	}
 }
 
 func (t *Tezos) listenTezosContract(ctx context.Context) {
@@ -272,7 +297,7 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 		Source:       t.key.PubKey.GetAddress(),
 		StorageLimit: operationParams.StorageLimit.Initiate,
 		GasLimit:     operationParams.GasLimit.Initiate,
-		Fee:          "1000",
+		Fee:          operationParams.Fee.Initiate,
 		Destination:  args.Contract,
 		Amount:       "0",
 		Parameters: &node.Parameters{
@@ -321,17 +346,7 @@ func (t *Tezos) Initiate(ctx context.Context, args chain.InitiateArgs) error {
 	params := json.RawMessage(value)
 	tx.Parameters.Value = &params
 
-	opHash, err := t.sendTransaction(ctx, tx)
-	if err != nil {
-		return err
-	}
-	t.operations <- chain.Operation{
-		Status:       chain.Pending,
-		Hash:         opHash,
-		ChainType:    chain.ChainTypeTezos,
-		HashedSecret: args.HashedSecret,
-	}
-
+	t.addToQueue(tx, args.HashedSecret)
 	return nil
 }
 
@@ -352,27 +367,18 @@ func (t *Tezos) Redeem(ctx context.Context, hashedSecret, secret chain.Hex, cont
 	}
 
 	params := json.RawMessage(value)
-	opHash, err := t.sendTransaction(ctx, node.Transaction{
+	t.addToQueue(node.Transaction{
 		Source:       t.key.PubKey.GetAddress(),
 		Amount:       "0",
 		StorageLimit: operationParams.StorageLimit.Redeem,
 		GasLimit:     operationParams.GasLimit.Redeem,
-		Fee:          "3000",
+		Fee:          operationParams.Fee.Redeem,
 		Destination:  contract,
 		Parameters: &node.Parameters{
 			Entrypoint: "redeem",
 			Value:      &params,
 		},
-	})
-	if err != nil {
-		return err
-	}
-	t.operations <- chain.Operation{
-		Status:       chain.Pending,
-		Hash:         opHash,
-		ChainType:    chain.ChainTypeTezos,
-		HashedSecret: hashedSecret,
-	}
+	}, hashedSecret)
 	return nil
 }
 
@@ -393,27 +399,18 @@ func (t *Tezos) Refund(ctx context.Context, hashedSecret chain.Hex, contract str
 	}
 
 	params := json.RawMessage(value)
-	opHash, err := t.sendTransaction(ctx, node.Transaction{
+	t.addToQueue(node.Transaction{
 		Source:       t.key.PubKey.GetAddress(),
 		Amount:       "0",
 		StorageLimit: operationParams.StorageLimit.Refund,
 		GasLimit:     operationParams.GasLimit.Refund,
-		Fee:          "10000",
+		Fee:          operationParams.Fee.Refund,
 		Destination:  contract,
 		Parameters: &node.Parameters{
 			Entrypoint: "refund",
 			Value:      &params,
 		},
-	})
-	if err != nil {
-		return err
-	}
-	t.operations <- chain.Operation{
-		Status:       chain.Pending,
-		Hash:         opHash,
-		ChainType:    chain.ChainTypeTezos,
-		HashedSecret: hashedSecret,
-	}
+	}, hashedSecret)
 	return nil
 }
 
@@ -653,35 +650,62 @@ func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomextezto
 	return nil
 }
 
-func (t *Tezos) sendTransaction(ctx context.Context, transaction node.Transaction) (string, error) {
+func (t *Tezos) addToQueue(transaction node.Transaction, hashedSecret chain.Hex) {
+	t.transactionsMutex.Lock()
+	t.transactions[hashedSecret] = transaction
+	t.transactionsMutex.Unlock()
+}
+
+func (t *Tezos) send(ctx context.Context) error {
+	t.transactionsMutex.Lock()
+	defer t.transactionsMutex.Unlock()
+
 	headerCtx, headerCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer headerCancel()
 	header, err := t.rpc.Header(fmt.Sprintf("head~%s", t.ttl), node.WithContext(headerCtx))
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	atomic.AddInt64(&t.counter, 1)
-	transaction.Counter = fmt.Sprintf("%d", t.counter)
+	operations := make([]node.Operation, 0)
+	for _, tx := range t.transactions {
+		atomic.AddInt64(&t.counter, 1)
+		tx.Counter = fmt.Sprintf("%d", t.counter)
+		operations = append(operations, node.Operation{
+			Kind: node.KindTransaction,
+			Body: tx,
+		})
+	}
 
-	encoded, err := forge.OPG(header.Hash, node.Operation{
-		Body: transaction,
-		Kind: node.KindTransaction,
-	})
+	encoded, err := forge.OPG(header.Hash, operations...)
 	if err != nil {
-		return "", err
+		return err
 	}
-
 	msg := hex.EncodeToString(encoded)
 	signature, err := t.key.SignHex(msg)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	injectCtx, injectCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer injectCancel()
-	return t.rpc.InjectOperaiton(node.InjectOperationRequest{
+	hash, err := t.rpc.InjectOperaiton(node.InjectOperationRequest{
 		Operation: signature.AppendToHex(msg),
 		ChainID:   header.ChainID,
 	}, node.WithContext(injectCtx))
+	if err != nil {
+		return err
+	}
+
+	for hashedSecret := range t.transactions {
+		t.operations <- chain.Operation{
+			Status:       chain.Pending,
+			Hash:         hash,
+			ChainType:    chain.ChainTypeTezos,
+			HashedSecret: hashedSecret,
+		}
+		delete(t.transactions, hashedSecret)
+	}
+
+	return nil
 }

@@ -15,6 +15,7 @@ type OperationParamsByContracts map[string]OperationParams
 type OperationParams struct {
 	GasLimit     ContractParams `yaml:"gas_limit"`
 	StorageLimit ContractParams `yaml:"storage_limit"`
+	Fee          ContractParams `yaml:"fee"`
 }
 
 // ContractParams -
