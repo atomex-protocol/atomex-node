@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"encoding/hex"
 	"strconv"
 	"sync"
 
@@ -153,9 +152,8 @@ func (contract *Atomexteztoken) listen(ctx context.Context) {
 					for i := range items {
 						switch items[i].Path {
 						case "0":
-							length := hex.DecodedLen(len(items[i].Content.Key))
-							key := make([]byte, length)
-							if _, err := hex.Decode(key, items[i].Content.Key);err != nil {
+							var key Key0
+							if err := json.Unmarshal(items[i].Content.Key, &key); err != nil {
 								log.Println(err)
 								continue
 							}
