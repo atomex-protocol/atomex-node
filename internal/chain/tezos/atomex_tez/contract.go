@@ -168,8 +168,9 @@ func (contract *Atomextez) listen(ctx context.Context) {
 					for i := range items {
 						switch items[i].Path {
 						case "big_map":
-							key, err := hex.DecodeString(items[i].Content.Key)
-							if err != nil {
+							length := hex.DecodedLen(len(items[i].Content.Key))
+							key := make([]byte, length)
+							if _, err := hex.Decode(key, items[i].Content.Key);err != nil {
 								log.Println(err)
 								continue
 							}
@@ -260,11 +261,11 @@ func (contract *Atomextez) GetAdd(ctx context.Context, page Page) ([]Add, error)
 	}
 	values := make([]Add, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Add
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -280,11 +281,11 @@ func (contract *Atomextez) GetInitiate(ctx context.Context, page Page) ([]Initia
 	}
 	values := make([]Initiate, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Initiate
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -300,11 +301,11 @@ func (contract *Atomextez) GetRedeem(ctx context.Context, page Page) ([]Redeem, 
 	}
 	values := make([]Redeem, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Redeem
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -320,11 +321,11 @@ func (contract *Atomextez) GetRefund(ctx context.Context, page Page) ([]Refund, 
 	}
 	values := make([]Refund, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Refund
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -355,7 +356,7 @@ func getLimits(p Page) Page {
 	return newPage
 }
 
-func getTransactions(ctx context.Context, tzktAPI *api.API, entrypoint, contract string, page Page) ([]api.Operation, error) {
+func getTransactions(ctx context.Context, tzktAPI *api.API, entrypoint, contract string, page Page) ([]api.Transaction, error) {
 	limits := getLimits(page)
 	return tzktAPI.GetTransactions(ctx, map[string]string{
 		"entrypoint": entrypoint,

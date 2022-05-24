@@ -153,8 +153,9 @@ func (contract *Atomexteztoken) listen(ctx context.Context) {
 					for i := range items {
 						switch items[i].Path {
 						case "0":
-							key, err := hex.DecodeString(items[i].Content.Key)
-							if err != nil {
+							length := hex.DecodedLen(len(items[i].Content.Key))
+							key := make([]byte, length)
+							if _, err := hex.Decode(key, items[i].Content.Key);err != nil {
 								log.Println(err)
 								continue
 							}
@@ -236,11 +237,11 @@ func (contract *Atomexteztoken) GetInitiate(ctx context.Context, page Page) ([]I
 	}
 	values := make([]Initiate, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Initiate
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -256,11 +257,11 @@ func (contract *Atomexteztoken) GetRedeem(ctx context.Context, page Page) ([]Red
 	}
 	values := make([]Redeem, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Redeem
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -276,11 +277,11 @@ func (contract *Atomexteztoken) GetRefund(ctx context.Context, page Page) ([]Ref
 	}
 	values := make([]Refund, 0)
 	for i := range operations {
-		if operations[i].Parameters == nil {
+		if operations[i].Parameter == nil {
 			continue
 		}
 		var value Refund
-		if err := json.Unmarshal(operations[i].Parameters.Value, &value); err != nil {
+		if err := json.Unmarshal(operations[i].Parameter.Value, &value); err != nil {
 			return nil, err
 		}
 		values = append(values, value)
@@ -311,7 +312,7 @@ func getLimits(p Page) Page {
 	return newPage
 }
 
-func getTransactions(ctx context.Context, tzktAPI *api.API, entrypoint, contract string, page Page) ([]api.Operation, error) {
+func getTransactions(ctx context.Context, tzktAPI *api.API, entrypoint, contract string, page Page) ([]api.Transaction, error) {
 	limits := getLimits(page)
 	return tzktAPI.GetTransactions(ctx, map[string]string{
 		"entrypoint": entrypoint,

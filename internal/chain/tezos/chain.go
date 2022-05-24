@@ -29,7 +29,7 @@ import (
 // Tezos -
 type Tezos struct {
 	cfg       Config
-	rpc       *node.NodeRPC
+	rpc       node.API
 	api       *api.API
 	key       *keys.Key
 	counter   int64
@@ -94,7 +94,7 @@ func New(cfg Config) (*Tezos, error) {
 
 	tez := &Tezos{
 		cfg:           cfg,
-		rpc:           node.NewNodeRPC(cfg.Node),
+		rpc:           node.NewMainRPC(cfg.Node),
 		key:           key,
 		api:           api.New(cfg.TzKT),
 		tezContract:   atomextez.New(cfg.TzKT),
@@ -134,7 +134,7 @@ func (t *Tezos) Init(ctx context.Context) error {
 
 	counterCtx, counterCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer counterCancel()
-	counterValue, err := t.rpc.Counter(t.key.PubKey.GetAddress(), "head", node.WithContext(counterCtx))
+	counterValue, err := t.rpc.ContractCounter(counterCtx, t.key.PubKey.GetAddress(), "head")
 	if err != nil {
 		return errors.Wrap(err, "counter")
 	}
@@ -546,13 +546,13 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 			return nil
 		}
 		for i := range ops {
-			if ops[i].Parameters == nil {
+			if ops[i].Parameter == nil {
 				continue
 			}
-			switch ops[i].Parameters.Entrypoint {
+			switch ops[i].Parameter.Entrypoint {
 			case atomextez.EntrypointRedeem:
 				var secret atomexteztoken.Redeem
-				if err := json.Unmarshal(ops[i].Parameters.Value, &secret); err != nil {
+				if err := json.Unmarshal(ops[i].Parameter.Value, &secret); err != nil {
 					return err
 				}
 
@@ -617,13 +617,13 @@ func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomextezto
 			return nil
 		}
 		for i := range ops {
-			if ops[i].Parameters == nil {
+			if ops[i].Parameter == nil {
 				continue
 			}
-			switch ops[i].Parameters.Entrypoint {
+			switch ops[i].Parameter.Entrypoint {
 			case atomexteztoken.EntrypointRedeem:
 				var secret atomexteztoken.Redeem
-				if err := json.Unmarshal(ops[i].Parameters.Value, &secret); err != nil {
+				if err := json.Unmarshal(ops[i].Parameter.Value, &secret); err != nil {
 					return err
 				}
 
@@ -662,7 +662,7 @@ func (t *Tezos) send(ctx context.Context) error {
 
 	headerCtx, headerCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer headerCancel()
-	header, err := t.rpc.Header(fmt.Sprintf("head~%s", t.ttl), node.WithContext(headerCtx))
+	header, err := t.rpc.Header(headerCtx, fmt.Sprintf("head~%s", t.ttl))
 	if err != nil {
 		return err
 	}
@@ -676,12 +676,16 @@ func (t *Tezos) send(ctx context.Context) error {
 			Body: tx,
 		})
 	}
+	b, _ := json.Marshal(operations)
+	t.log.Info().Str("block_hash", header.Hash).Str("operations", string(b)).Msg("before forging")
 
 	encoded, err := forge.OPG(header.Hash, operations...)
 	if err != nil {
 		return err
 	}
 	msg := hex.EncodeToString(encoded)
+
+	t.log.Info().Str("data", msg).Msg("after forging")
 	signature, err := t.key.SignHex(msg)
 	if err != nil {
 		return err
@@ -689,10 +693,10 @@ func (t *Tezos) send(ctx context.Context) error {
 
 	injectCtx, injectCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer injectCancel()
-	hash, err := t.rpc.InjectOperaiton(node.InjectOperationRequest{
+	hash, err := t.rpc.InjectOperation(injectCtx, node.InjectOperationRequest{
 		Operation: signature.AppendToHex(msg),
 		ChainID:   header.ChainID,
-	}, node.WithContext(injectCtx))
+	})
 	if err != nil {
 		return err
 	}
