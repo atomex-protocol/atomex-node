@@ -148,8 +148,8 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 	var cancelErr error
 	var notChanged bool
 	mm.orders.Range(func(cid clientOrderID, order *Order) bool {
-		if cid.kind == clientID.kind && cid.side == clientID.side && cid.symbol == clientID.symbol {
-			if price != order.Price {
+		if clientID.Equals(cid) {
+			if price-order.Price != 0 {
 				if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
 					ID:     order.ID,
 					Symbol: order.Symbol,

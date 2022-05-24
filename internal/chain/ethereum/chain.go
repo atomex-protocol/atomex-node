@@ -584,24 +584,24 @@ func (e *Ethereum) listen(ctx context.Context) {
 			return
 		case l := <-e.logs:
 			if err := e.parseLog(l); err != nil {
-				e.log.Error().Err(err).Msg("")
+				e.log.Error().Err(err).Msg("parseLog")
 			}
 		case head := <-e.head:
 			if err := e.parseHead(head); err != nil {
-				e.log.Error().Err(err).Msg("")
+				e.log.Error().Err(err).Msg("parseHead")
 			}
 		case err := <-e.subLogs.Err():
 			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				if err := e.reconnect(ctx); err != nil {
-					e.log.Error().Err(err).Msg("")
+					e.log.Error().Err(err).Msg("reconnect")
 				}
 			}
 		case err := <-e.subHead.Err():
 			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				if err := e.reconnect(ctx); err != nil {
-					e.log.Error().Err(err).Msg("")
+					e.log.Error().Err(err).Msg("reconnect")
 				}
 			}
 		}
