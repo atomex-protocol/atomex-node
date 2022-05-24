@@ -3,7 +3,7 @@ module github.com/atomex-protocol/watch_tower
 go 1.18
 
 require (
-	github.com/dipdup-net/go-lib v0.2.11
+	github.com/dipdup-net/go-lib v0.2.12
 	github.com/ebellocchia/go-base58 v0.1.0
 	github.com/ethereum/go-ethereum v1.10.17
 	github.com/go-playground/validator/v10 v10.9.0

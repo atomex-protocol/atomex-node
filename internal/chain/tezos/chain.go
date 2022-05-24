@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -134,15 +133,11 @@ func (t *Tezos) Init(ctx context.Context) error {
 
 	counterCtx, counterCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer counterCancel()
-	counterValue, err := t.rpc.ContractCounter(counterCtx, t.key.PubKey.GetAddress(), "head")
+	counter, err := t.api.AccountCounter(counterCtx, t.key.PubKey.GetAddress())
 	if err != nil {
 		return errors.Wrap(err, "counter")
 	}
-	counter, err := strconv.ParseInt(counterValue, 10, 64)
-	if err != nil {
-		return errors.Wrap(err, "invalid counter")
-	}
-	atomic.StoreInt64(&t.counter, counter)
+	atomic.StoreInt64(&t.counter, int64(counter))
 
 	return nil
 }
@@ -657,6 +652,10 @@ func (t *Tezos) addToQueue(transaction node.Transaction, hashedSecret chain.Hex)
 }
 
 func (t *Tezos) send(ctx context.Context) error {
+	if len(t.transactions) == 0 {
+		return nil
+	}
+
 	t.transactionsMutex.Lock()
 	defer t.transactionsMutex.Unlock()
 
