@@ -61,21 +61,3 @@ jobs:
       uses: github/codeql-action/autobuild@v1
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
-  anchore-build-scan:
-    name: Anchore build scan
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout the code
-      uses: actions/checkout@v2
-    - name: Build the Docker image
-      run: docker build . --file build/watch_tower/Dockerfile --tag localbuild/testimage:latest --build-arg config_file=config.test.yml
-    - name: Run the Anchore scan action itself with GitHub Advanced Security code scanning integration enabled
-      uses: anchore/scan-action@main
-      with:
-        image: "localbuild/testimage:latest"
-        acs-report-enable: true
-        severity-cutoff: high
-    - name: Upload Anchore Scan Report
-      uses: github/codeql-action/upload-sarif@v1
-      with:
-        sarif_file: results.sarif
