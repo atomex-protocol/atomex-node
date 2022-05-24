@@ -675,8 +675,6 @@ func (t *Tezos) send(ctx context.Context) error {
 			Body: tx,
 		})
 	}
-	b, _ := json.Marshal(operations)
-	t.log.Info().Str("block_hash", header.Hash).Str("operations", string(b)).Msg("before forging")
 
 	encoded, err := forge.OPG(header.Hash, operations...)
 	if err != nil {
@@ -684,7 +682,6 @@ func (t *Tezos) send(ctx context.Context) error {
 	}
 	msg := hex.EncodeToString(encoded)
 
-	t.log.Info().Str("data", msg).Msg("after forging")
 	signature, err := t.key.SignHex(msg)
 	if err != nil {
 		return err
