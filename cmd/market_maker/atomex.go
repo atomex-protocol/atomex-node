@@ -157,6 +157,7 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote) error {
 				}); err != nil {
 					cancelErr = err
 				}
+				mm.log.Info().Int64("id", order.ID).Msg("order cancelling...")
 			} else {
 				notChanged = true
 			}
@@ -261,7 +262,7 @@ func (mm *MarketMaker) secret(key []byte, address string, nonce int64) (secret, 
 
 func (mm *MarketMaker) findDuplicatesOrders(orders []atomex.Order) error {
 	for i := range orders {
-		mm.log.Info().Int64("id", orders[i].ID).Str("status", string(orders[i].Status)).Msg("atomex order status changed")
+		mm.log.Info().Int64("id", orders[i].ID).Str("status", string(orders[i].Status)).Msg("find placed order")
 		var cid clientOrderID
 		if err := cid.parse(orders[i].ClientOrderID); err != nil {
 			return errors.Wrap(err, "cid.parse")

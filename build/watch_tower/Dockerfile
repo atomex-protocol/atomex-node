@@ -7,16 +7,16 @@ ENV AP_ENV=production
 
 RUN apk --no-cache add ca-certificates
 
-RUN mkdir -p $GOPATH/src/github.com/atomex-protocol/watch_tower/
+RUN mkdir -p $GOPATH/src/github.com/atomex-protocol/atomex-node/
 
-COPY ./go.* $GOPATH/src/github.com/atomex-protocol/watch_tower/
-WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/
+COPY ./go.* $GOPATH/src/github.com/atomex-protocol/atomex-node/
+WORKDIR $GOPATH/src/github.com/atomex-protocol/atomex-node/
 RUN go mod download
 
 COPY cmd/watch_tower cmd/watch_tower
 COPY internal internal
 
-WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/cmd/watch_tower/
+WORKDIR $GOPATH/src/github.com/atomex-protocol/atomex-node/cmd/watch_tower/
 RUN CGO_ENABLED=0 GO111MODULE=on GOOS=linux go build -a -o /go/bin/watch_tower .
 
 # ---------------------------------------------------------------------
