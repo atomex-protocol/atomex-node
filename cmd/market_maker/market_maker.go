@@ -297,6 +297,7 @@ func (mm *MarketMaker) initialize(ctx context.Context) error {
 
 func (mm *MarketMaker) initializeOrders(ctx context.Context) error {
 	var end bool
+	var offset uint64
 	for !end {
 		ordersCtx, cancelOrders := context.WithTimeout(ctx, time.Second*5)
 		defer cancelOrders()
@@ -305,10 +306,12 @@ func (mm *MarketMaker) initializeOrders(ctx context.Context) error {
 			Active: true,
 			Sort:   atomex.SortDesc,
 			Limit:  limitForAtomexRequest,
+			Offset: offset,
 		})
 		if err != nil {
 			return errors.Wrap(err, "atomexAPI.Orders")
 		}
+		offset += uint64(len(orders))
 		end = len(orders) != limitForAtomexRequest
 
 		if err := mm.findDuplicatesOrders(orders); err != nil {
