@@ -587,7 +587,7 @@ func (e *Ethereum) listen(ctx context.Context) {
 				e.log.Error().Err(err).Msg("parseLog")
 			}
 		case head := <-e.head:
-			if err := e.parseHead(head); err != nil {
+			if err := e.parseHead(ctx, head); err != nil {
 				e.log.Error().Err(err).Msg("parseHead")
 			}
 		case err := <-e.subLogs.Err():
@@ -691,9 +691,15 @@ func (e *Ethereum) handleRedeemed(abi *abi.ABI, l types.Log, event *abi.Event) e
 	return nil
 }
 
-func (e *Ethereum) parseHead(head *types.Header) error {
-	block, err := e.client.BlockByHash(context.Background(), head.Hash())
+func (e *Ethereum) parseHead(ctx context.Context, head *types.Header) error {
+	blockCtx, blockCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer blockCancel()
+
+	block, err := e.client.BlockByHash(blockCtx, head.Hash())
 	if err != nil {
+		if errors.Is(err, ethereum.NotFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -711,7 +717,11 @@ func (e *Ethereum) parseHead(head *types.Header) error {
 		if address != e.cfg.EthContract && address != e.cfg.Erc20Contract {
 			continue
 		}
-		receipt, err := e.client.TransactionReceipt(context.Background(), txs[i].Hash())
+
+		receiptCtx, receiptCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer receiptCancel()
+
+		receipt, err := e.client.TransactionReceipt(receiptCtx, txs[i].Hash())
 		if err != nil {
 			return err
 		}
