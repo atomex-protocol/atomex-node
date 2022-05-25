@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
@@ -31,7 +30,6 @@ type Tezos struct {
 	rpc       node.API
 	api       *api.API
 	key       *keys.Key
-	counter   int64
 	ttl       string
 	minPayoff decimal.Decimal
 
@@ -130,15 +128,6 @@ func (t *Tezos) Wallet() chain.Wallet {
 // Init -
 func (t *Tezos) Init(ctx context.Context) error {
 	t.log.Info().Msg("initializing...")
-
-	counterCtx, counterCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer counterCancel()
-	counter, err := t.api.AccountCounter(counterCtx, t.key.PubKey.GetAddress())
-	if err != nil {
-		return errors.Wrap(err, "counter")
-	}
-	atomic.StoreInt64(&t.counter, int64(counter))
-
 	return nil
 }
 
@@ -666,10 +655,15 @@ func (t *Tezos) send(ctx context.Context) error {
 		return err
 	}
 
+	counter, err := t.counter(ctx)
+	if err != nil {
+		return err
+	}
+
 	operations := make([]node.Operation, 0)
 	for _, tx := range t.transactions {
-		atomic.AddInt64(&t.counter, 1)
-		tx.Counter = fmt.Sprintf("%d", t.counter)
+		counter++
+		tx.Counter = fmt.Sprintf("%d", counter)
 		operations = append(operations, node.Operation{
 			Kind: node.KindTransaction,
 			Body: tx,
@@ -708,4 +702,11 @@ func (t *Tezos) send(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (t *Tezos) counter(ctx context.Context) (uint64, error) {
+	counterCtx, counterCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer counterCancel()
+
+	return t.api.AccountCounter(counterCtx, t.key.PubKey.GetAddress())
 }
