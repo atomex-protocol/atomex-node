@@ -18,4 +18,4 @@ strategies:
     window: 60
 
 log_level: info
-restore: false
+restore: true

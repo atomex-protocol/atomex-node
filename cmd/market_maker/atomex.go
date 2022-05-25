@@ -263,28 +263,35 @@ func (mm *MarketMaker) secret(key []byte, address string, nonce int64) (secret, 
 func (mm *MarketMaker) findDuplicatesOrders(orders []atomex.Order) error {
 	for i := range orders {
 		mm.log.Info().Int64("id", orders[i].ID).Str("status", string(orders[i].Status)).Msg("find placed order")
-		var cid clientOrderID
-		if err := cid.parse(orders[i].ClientOrderID); err != nil {
+		var clientID clientOrderID
+		if err := clientID.parse(orders[i].ClientOrderID); err != nil {
 			return errors.Wrap(err, "cid.parse")
 		}
 
-		if order, ok := mm.orders.Load(cid); ok {
-			if order.ID == orders[i].ID {
-				continue
+		var found bool
+		mm.orders.Range(func(cid clientOrderID, order *Order) bool {
+			if clientID.Equals(cid) {
+				mm.log.Warn().Int64("id", order.ID).Int64("second_id", orders[i].ID).Msg("found order duplicate. it will be cancelled.")
+				if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
+					ID:     order.ID,
+					Symbol: order.Symbol,
+					Side:   order.Side,
+				}); err != nil {
+					mm.log.Error().Err(err).Msg("order cancelling")
+				} else {
+					mm.log.Info().Int64("id", order.ID).Msg("order cancelling...")
+					mm.secrets.Delete(chain.Hex(order.Secret.Hash))
+				}
+				mm.orders.Delete(cid)
+				found = true
+				return false
 			}
+			return true
+		})
 
-			mm.log.Warn().Int64("id", order.ID).Int64("second_id", orders[i].ID).Msg("found order duplicate. it will be cancelled.")
-			if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
-				ID:     orders[i].ID,
-				Side:   orders[i].Side,
-				Symbol: orders[i].Symbol,
-			}); err != nil {
-				return errors.Wrap(err, "atomex.CancelOrder")
-			}
-			mm.secrets.Delete(chain.Hex(order.Secret.Hash))
-		} else {
+		if !found {
 			internalOrder := atomexOrderToInternal(orders[i])
-			mm.orders.Store(cid, &internalOrder)
+			mm.orders.Store(clientID, &internalOrder)
 		}
 	}
 	return nil
@@ -401,7 +408,9 @@ func (mm *MarketMaker) handleAtomexOrderUpdate(order atomex.OrderWebsocket) erro
 	switch order.Status {
 	case atomex.OrderStatusCanceled, atomex.OrderStatusRejected:
 		mm.orders.Delete(cid)
-		mm.swaps.Delete(chain.Hex(internalOrder.Secret.Hash))
+		if internalOrder != nil {
+			mm.swaps.Delete(chain.Hex(internalOrder.Secret.Hash))
+		}
 
 	case atomex.OrderStatusFilled, atomex.OrderStatusPartiallyFilled: // do not handle. it's because it's handled in `handleAtomexSwapUpdate`
 	case atomex.OrderStatusPending: // do not handle. it's internal atomex status.
