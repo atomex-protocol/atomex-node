@@ -20,6 +20,7 @@ import (
 	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // MarketMaker -
@@ -211,7 +212,7 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 	}
 
 	if err := mm.initialize(ctx); err != nil {
-		return errors.Wrap(err, "initialize")
+		log.Error().Err(err).Msg("initialization error")
 	}
 
 	return nil
