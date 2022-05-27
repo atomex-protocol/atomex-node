@@ -5,6 +5,6 @@ tezos:
   min_payoff: "0"
 
 ethereum:
-  node: https://ropsten.infura.io/v3/c472af462a664d93a4ca3962ae5e3749
-  wss: wss://ropsten.infura.io/ws/v3/c472af462a664d93a4ca3962ae5e3749
+  node: https://goerli.infura.io/v3/624b27cf38ab4805ac0e291d0313396c
+  wss: wss://goerli.infura.io/ws/v3/624b27cf38ab4805ac0e291d0313396c
   min_payoff: "0"

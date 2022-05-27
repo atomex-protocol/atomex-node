@@ -5,10 +5,10 @@ tower:
 	cd cmd/watch_tower && go run .
 
 tower-test:
-	cd cmd/watch_tower && go run . -c ../../configs/test
+	cd cmd/watch_tower && go run . -c ../../configs
 
 market-maker:
-	cd cmd/market_maker && go run . -c ../../configs/test
+	cd cmd/market_maker && go run . -c ../../configs
 
 test:
 	go test ./...

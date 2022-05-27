@@ -2,7 +2,6 @@ package atomex
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -245,15 +244,8 @@ func (ws *Websocket) readAllMessages() error {
 		return errors.Wrap(err, "NextReader")
 	}
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return err
-	}
-
-	ws.logger.Trace().RawJSON("data", data).Msg("server->client")
-
 	var msg WebsocketResponse
-	if err := json.Unmarshal(data, &msg); err != nil {
+	if err := json.NewDecoder(reader).Decode(&msg); err != nil {
 		return err
 	}
 

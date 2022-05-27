@@ -5,10 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/atomex-protocol/watch_tower/internal/chain"
@@ -32,7 +30,6 @@ type Tezos struct {
 	rpc       node.API
 	api       *api.API
 	key       *keys.Key
-	counter   int64
 	ttl       string
 	minPayoff decimal.Decimal
 
@@ -131,19 +128,6 @@ func (t *Tezos) Wallet() chain.Wallet {
 // Init -
 func (t *Tezos) Init(ctx context.Context) error {
 	t.log.Info().Msg("initializing...")
-
-	counterCtx, counterCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer counterCancel()
-	counterValue, err := t.rpc.ContractCounter(counterCtx, t.key.PubKey.GetAddress(), "head")
-	if err != nil {
-		return errors.Wrap(err, "counter")
-	}
-	counter, err := strconv.ParseInt(counterValue, 10, 64)
-	if err != nil {
-		return errors.Wrap(err, "invalid counter")
-	}
-	atomic.StoreInt64(&t.counter, counter)
-
 	return nil
 }
 
@@ -657,6 +641,10 @@ func (t *Tezos) addToQueue(transaction node.Transaction, hashedSecret chain.Hex)
 }
 
 func (t *Tezos) send(ctx context.Context) error {
+	if len(t.transactions) == 0 {
+		return nil
+	}
+
 	t.transactionsMutex.Lock()
 	defer t.transactionsMutex.Unlock()
 
@@ -667,17 +655,20 @@ func (t *Tezos) send(ctx context.Context) error {
 		return err
 	}
 
+	counter, err := t.counter(ctx)
+	if err != nil {
+		return err
+	}
+
 	operations := make([]node.Operation, 0)
 	for _, tx := range t.transactions {
-		atomic.AddInt64(&t.counter, 1)
-		tx.Counter = fmt.Sprintf("%d", t.counter)
+		counter++
+		tx.Counter = fmt.Sprintf("%d", counter)
 		operations = append(operations, node.Operation{
 			Kind: node.KindTransaction,
 			Body: tx,
 		})
 	}
-	b, _ := json.Marshal(operations)
-	t.log.Info().Str("block_hash", header.Hash).Str("operations", string(b)).Msg("before forging")
 
 	encoded, err := forge.OPG(header.Hash, operations...)
 	if err != nil {
@@ -685,7 +676,6 @@ func (t *Tezos) send(ctx context.Context) error {
 	}
 	msg := hex.EncodeToString(encoded)
 
-	t.log.Info().Str("data", msg).Msg("after forging")
 	signature, err := t.key.SignHex(msg)
 	if err != nil {
 		return err
@@ -712,4 +702,11 @@ func (t *Tezos) send(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (t *Tezos) counter(ctx context.Context) (uint64, error) {
+	counterCtx, counterCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer counterCancel()
+
+	return t.api.AccountCounter(counterCtx, t.key.PubKey.GetAddress())
 }

@@ -176,6 +176,11 @@ func (c *clientOrderID) parse(str string) error {
 	return nil
 }
 
+// Equals -
+func (c clientOrderID) Equals(clientID clientOrderID) bool {
+	return c.kind == clientID.kind && c.side == clientID.side && c.symbol == clientID.symbol
+}
+
 func strategyKindToInt(kind strategy.Kind) int {
 	switch kind {
 	case strategy.KindFollow:

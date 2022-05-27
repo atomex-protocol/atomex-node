@@ -273,10 +273,10 @@ func (e *Ethereum) Initiate(ctx context.Context, args chain.InitiateArgs) error 
 
 	switch args.Contract {
 	case e.cfg.EthContract:
-		tx, err = e.eth.Initiate(opts, hashedSecretBytes, participant, refundTime, nil, args.PayOff.BigInt(), true)
+		tx, err = e.eth.Initiate(opts, hashedSecretBytes, participant, refundTime, big.NewInt(0), args.PayOff.BigInt(), true)
 	case e.cfg.Erc20Contract:
 		address := common.HexToAddress(args.Contract)
-		tx, err = e.erc20.Initiate(opts, hashedSecretBytes, address, participant, refundTime, nil, args.Amount.BigInt(), args.PayOff.BigInt(), true)
+		tx, err = e.erc20.Initiate(opts, hashedSecretBytes, address, participant, refundTime, big.NewInt(0), args.Amount.BigInt(), args.PayOff.BigInt(), true)
 	}
 	if err != nil {
 		return err
@@ -584,24 +584,24 @@ func (e *Ethereum) listen(ctx context.Context) {
 			return
 		case l := <-e.logs:
 			if err := e.parseLog(l); err != nil {
-				e.log.Error().Err(err).Msg("")
+				e.log.Error().Err(err).Msg("parseLog")
 			}
 		case head := <-e.head:
-			if err := e.parseHead(head); err != nil {
-				e.log.Error().Err(err).Msg("")
+			if err := e.parseHead(ctx, head); err != nil {
+				e.log.Error().Err(err).Msg("parseHead")
 			}
 		case err := <-e.subLogs.Err():
 			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				if err := e.reconnect(ctx); err != nil {
-					e.log.Error().Err(err).Msg("")
+					e.log.Error().Err(err).Msg("reconnect")
 				}
 			}
 		case err := <-e.subHead.Err():
 			e.log.Error().Err(err).Msg("ethereum subscription error")
 			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 				if err := e.reconnect(ctx); err != nil {
-					e.log.Error().Err(err).Msg("")
+					e.log.Error().Err(err).Msg("reconnect")
 				}
 			}
 		}
@@ -691,9 +691,15 @@ func (e *Ethereum) handleRedeemed(abi *abi.ABI, l types.Log, event *abi.Event) e
 	return nil
 }
 
-func (e *Ethereum) parseHead(head *types.Header) error {
-	block, err := e.client.BlockByHash(context.Background(), head.Hash())
+func (e *Ethereum) parseHead(ctx context.Context, head *types.Header) error {
+	blockCtx, blockCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer blockCancel()
+
+	block, err := e.client.BlockByHash(blockCtx, head.Hash())
 	if err != nil {
+		if errors.Is(err, ethereum.NotFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -711,7 +717,11 @@ func (e *Ethereum) parseHead(head *types.Header) error {
 		if address != e.cfg.EthContract && address != e.cfg.Erc20Contract {
 			continue
 		}
-		receipt, err := e.client.TransactionReceipt(context.Background(), txs[i].Hash())
+
+		receiptCtx, receiptCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer receiptCancel()
+
+		receipt, err := e.client.TransactionReceipt(receiptCtx, txs[i].Hash())
 		if err != nil {
 			return err
 		}

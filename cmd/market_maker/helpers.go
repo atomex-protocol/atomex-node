@@ -68,5 +68,5 @@ func atomexStatusToInternal(status atomex.SwapStatus) tools.Status {
 
 func amountToInt(value decimal.Decimal, decimals int) decimal.Decimal {
 	mux := decimal.NewFromInt(10).Pow(decimal.NewFromInt(int64(decimals)))
-	return value.Mul(mux)
+	return value.Mul(mux).Round(0)
 }

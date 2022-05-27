@@ -9,11 +9,11 @@ strategies:
     symbol: XTZ_ETH
     spread:
       ask: 0.03
-      bid: 0.05
+      bid: 0.03
     volume: 0.5
     dist:
-      min: 0.001
-      max: 0.006
+      min: 0.03
+      max: 0.04
     width: 1.5
     window: 60
 

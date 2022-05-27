@@ -7,16 +7,16 @@ ENV AP_ENV=production
 
 RUN apk --no-cache add ca-certificates g++
 
-RUN mkdir -p $GOPATH/src/github.com/atomex-protocol/watch_tower/
+RUN mkdir -p $GOPATH/src/github.com/atomex-protocol/atomex-node/
 
-COPY ./go.* $GOPATH/src/github.com/atomex-protocol/watch_tower/
-WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/
+COPY ./go.* $GOPATH/src/github.com/atomex-protocol/atomex-node/
+WORKDIR $GOPATH/src/github.com/atomex-protocol/atomex-node/
 RUN go mod download
 
 COPY cmd/market_maker cmd/market_maker
 COPY internal internal
 
-WORKDIR $GOPATH/src/github.com/atomex-protocol/watch_tower/cmd/market_maker/
+WORKDIR $GOPATH/src/github.com/atomex-protocol/atomex-node/cmd/market_maker/
 
 # enable CGO for cryptography
 RUN CGO_ENABLED=1 GO111MODULE=on GOOS=linux go build -ldflags "-linkmode external -extldflags '-static' -s -w"  -a -o /go/bin/market_maker .
