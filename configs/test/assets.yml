@@ -12,11 +12,11 @@ XTZ:
 ETH:
   name: ETH
   chain: ethereum
-  atomex_contract: 0x527d1049837EdF5f99c287a41a87702686082bF8
+  atomex_contract: 0x512fe6b803ba327dcefbf2cec7de333f761b0f2b
   decimals: 18
-USDT:
-  name: USDT
-  chain: ethereum
-  atomex_contract: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
-  decimals: 18
+# USDT:
+#   name: USDT
+#   chain: ethereum
+#   atomex_contract: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
+#   decimals: 18
 
