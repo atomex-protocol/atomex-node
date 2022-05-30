@@ -190,18 +190,8 @@
       },
       {
         "internalType": "uint256",
-        "name": "_countdown",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
         "name": "_payoff",
         "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "_active",
-        "type": "bool"
       }
     ],
     "name": "initiate",
