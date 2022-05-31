@@ -167,11 +167,13 @@ func (contract *Atomextez) listen(ctx context.Context) {
 					for i := range items {
 						switch items[i].Path {
 						case "big_map":
-							var key KeyBigMap
-							if err := json.Unmarshal(items[i].Content.Key, &key); err != nil {
-								log.Println(err)
-								continue
-							}
+							// TODO: temp
+							contentKey := items[i].Content.Key
+							key := KeyBigMap(contentKey[1:len(contentKey) - 1])
+							// if err := json.Unmarshal(items[i].Content.Key, &key); err != nil {
+							// 	log.Println(err)
+							// 	continue
+							// }
 
 							var value ValueBigMap
 							if err := json.Unmarshal(items[i].Content.Value, &value); err != nil {

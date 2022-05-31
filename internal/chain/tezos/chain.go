@@ -493,7 +493,7 @@ func (t *Tezos) restoreFinilizationSwap(ctx context.Context, bm api.BigMap, key 
 }
 
 func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.BigMapUpdate) error {
-	hashedSecret := chain.NewHexFromBytes(update.BigMap.Key)
+	hashedSecret := chain.Hex(update.BigMap.Key)
 
 	switch update.Action {
 	case BigMapActionAddKey:
