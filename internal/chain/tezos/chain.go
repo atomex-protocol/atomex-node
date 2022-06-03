@@ -43,6 +43,7 @@ type Tezos struct {
 
 	transactionsMutex sync.Mutex
 	transactions      map[chain.Hex]node.Transaction
+	lastCounter       uint64
 
 	wg sync.WaitGroup
 }
@@ -660,6 +661,10 @@ func (t *Tezos) send(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if counter == t.lastCounter {
+		return nil
+	}
+	t.lastCounter = counter
 
 	operations := make([]node.Operation, 0)
 	for _, tx := range t.transactions {

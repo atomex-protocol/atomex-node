@@ -35,11 +35,5 @@ func (swap *Swap) merge(update tools.Swap) {
 		return
 	}
 
-	swap.Status = update.Status
-	swap.Acceptor.Merge(update.Acceptor)
-	swap.Initiator.Merge(update.Initiator)
-
-	if swap.Secret.IsEmpty() {
-		swap.Secret = update.Secret
-	}
+	swap.Swap = update
 }

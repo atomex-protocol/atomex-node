@@ -59,8 +59,8 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 				if err := mm.tracker.Redeem(ctx, *current, current.Acceptor); err != nil {
 					mm.log.Err(err).Msg("tracker.Redeem")
-					continue
 				}
+				continue
 
 			case tools.StatusRefundedOnce:
 				if current.IsUnknown() {
@@ -87,7 +87,6 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 
 				if err := mm.tracker.Refund(ctx, *current, current.Initiator); err != nil {
 					mm.log.Err(err).Msg("tracker.Refund")
-					continue
 				}
 
 			case tools.StatusRefunded, tools.StatusRedeemed:
@@ -95,6 +94,10 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 				mm.secrets.Delete(current.HashedSecret)
 			}
 
+		case <-mm.tracker.Restored():
+			if err := mm.initialize(ctx); err != nil {
+				mm.log.Err(err).Msg("initialize")
+			}
 		}
 	}
 }

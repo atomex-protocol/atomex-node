@@ -20,7 +20,6 @@ import (
 	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // MarketMaker -
@@ -211,10 +210,6 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 		}
 	}
 
-	if err := mm.initialize(ctx); err != nil {
-		log.Error().Err(err).Msg("initialization error")
-	}
-
 	return nil
 }
 
@@ -289,7 +284,7 @@ func (mm *MarketMaker) initialize(ctx context.Context) error {
 		return errors.Wrap(err, "initializeSwaps")
 	}
 
-	if err := mm.sendOneByOneLimits(); err != nil {
+	if err := mm.sendOneByOneLimits(true); err != nil {
 		return errors.Wrap(err, "sendOneByOneLimits")
 	}
 
@@ -323,7 +318,6 @@ func (mm *MarketMaker) initializeOrders(ctx context.Context) error {
 }
 
 func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
-
 	for i := range mm.activeSwaps {
 		if mm.activeSwaps[i].User.Status != atomex.SwapStatusInvolved || mm.activeSwaps[i].CounterParty.Status != atomex.SwapStatusInvolved {
 			continue
@@ -343,8 +337,10 @@ func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
 			return errors.Wrap(err, "handleAtomexSwapUpdate")
 		}
 
-		if err := mm.initiateInvolvedSwap(ctx, mm.activeSwaps[i]); err != nil {
-			return errors.Wrap(err, "initiateInvolvedSwap")
+		if internalSwap.Status == tools.StatusEmpty {
+			if err := mm.initiateInvolvedSwap(ctx, mm.activeSwaps[i]); err != nil {
+				return errors.Wrap(err, "initiateInvolvedSwap")
+			}
 		}
 	}
 
