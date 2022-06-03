@@ -3,6 +3,7 @@ package atomextez
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strconv"
@@ -167,8 +168,13 @@ func (contract *Atomextez) listen(ctx context.Context) {
 					for i := range items {
 						switch items[i].Path {
 						case "big_map":
-							var key KeyBigMap
-							if err := json.Unmarshal(items[i].Content.Key, &key); err != nil {
+							str, err  := strconv.Unquote(string(items[i].Content.Key))
+							if err != nil {
+								log.Println(err)
+								continue
+							}
+							decoded := make([]byte, hex.DecodedLen(len(str)))
+							if _, err := hex.Decode(decoded, []byte(str)); err != nil {
 								log.Println(err)
 								continue
 							}
@@ -180,7 +186,7 @@ func (contract *Atomextez) listen(ctx context.Context) {
 							}
 							contract.bigmap <- BigMapUpdate{
 								BigMap: BigMap{
-									Key: key,
+									Key: KeyBigMap(decoded),
 									Value: value,
 								},
 								Level: items[i].Level,

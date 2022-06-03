@@ -456,13 +456,18 @@ func (t *Tezos) restoreFinilizationSwap(ctx context.Context, bm api.BigMap, key 
 		return err
 	}
 
+	decodedKey, err := hex.DecodeString(key.Key)
+	if err != nil {
+		return err
+	}
+
 	for i := range updates {
 		if t.cfg.Contract == bm.Contract.Address {
 			var bmUpdate atomextez.BigMapUpdate
 			if err := json.Unmarshal(updates[i].Value, &bmUpdate.BigMap.Value); err != nil {
 				return err
 			}
-			bmUpdate.BigMap.Key = atomextez.KeyBigMap(key.Key)
+			bmUpdate.BigMap.Key = atomextez.KeyBigMap(decodedKey)
 			bmUpdate.BigMap.Ptr = &bm.Ptr
 			bmUpdate.Action = updates[i].Action
 			bmUpdate.Contract = bm.Contract.Address
@@ -475,7 +480,7 @@ func (t *Tezos) restoreFinilizationSwap(ctx context.Context, bm api.BigMap, key 
 			if err := json.Unmarshal(updates[i].Value, &bmUpdate.BigMap0.Value); err != nil {
 				return err
 			}
-			bmUpdate.BigMap0.Key = atomexteztoken.Key0(key.Key)
+			bmUpdate.BigMap0.Key = atomexteztoken.Key0(decodedKey)
 			bmUpdate.BigMap0.Ptr = &bm.Ptr
 			bmUpdate.Action = updates[i].Action
 			bmUpdate.Contract = bm.Contract.Address
@@ -489,7 +494,7 @@ func (t *Tezos) restoreFinilizationSwap(ctx context.Context, bm api.BigMap, key 
 }
 
 func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.BigMapUpdate) error {
-	hashedSecret := chain.Hex(update.BigMap.Key)
+	hashedSecret := chain.NewHexFromBytes(update.BigMap.Key)
 
 	switch update.Action {
 	case BigMapActionAddKey:
@@ -560,7 +565,7 @@ func (t *Tezos) parseTezosContractUpdate(ctx context.Context, update atomextez.B
 }
 
 func (t *Tezos) parseTokenContractUpdate(ctx context.Context, update atomexteztoken.BigMap0Update) error {
-	hashedSecret := chain.Hex(update.BigMap0.Key)
+	hashedSecret := chain.NewHexFromBytes(update.BigMap0.Key)
 
 	switch update.Action {
 	case BigMapActionAddKey:
