@@ -64,7 +64,7 @@ func (mm *MarketMaker) handleAtomexUpdate(ctx context.Context, data atomex.Messa
 	return nil
 }
 
-func (mm *MarketMaker) sendOneByOneLimits(force bool) error {
+func (mm *MarketMaker) sendOneByOneLimits() error {
 	for i := range mm.strategies {
 		if !mm.strategies[i].Is(strategy.KindOneByOne) {
 			continue
@@ -77,7 +77,7 @@ func (mm *MarketMaker) sendOneByOneLimits(force bool) error {
 		}
 
 		for i := range quotes {
-			if err := mm.sendOrder(quotes[i], force); err != nil {
+			if err := mm.sendOrder(quotes[i], true); err != nil {
 				return err
 			}
 		}
@@ -110,7 +110,7 @@ func (mm *MarketMaker) processTicker(tick exchange.Ticker, symbol string) error 
 		for i := range mm.strategies {
 			quotes, err := mm.strategies[i].Quotes(args)
 			if err != nil {
-				return errors.Wrap(err, "Quotes")
+				return nil
 			}
 			for j := range quotes {
 				if err := mm.sendOrder(quotes[j], false); err != nil {
@@ -146,9 +146,11 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote, force bool) error {
 	}
 
 	var cancelErr error
-	var changed bool
+	notChanged := true
+	var found bool
 	mm.orders.Range(func(cid clientOrderID, order *Order) bool {
 		if clientID.Equals(cid) {
+			found = true
 			if price != order.Price || force {
 				if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
 					ID:     order.ID,
@@ -158,7 +160,7 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote, force bool) error {
 					cancelErr = err
 				}
 				mm.log.Info().Int64("id", order.ID).Msg("order cancelling...")
-				changed = true
+				notChanged = false
 			}
 			return false
 		}
@@ -168,7 +170,7 @@ func (mm *MarketMaker) sendOrder(quote strategy.Quote, force bool) error {
 		return errors.Wrap(cancelErr, "atomex.CancelOrder")
 	}
 
-	if !changed {
+	if found && notChanged {
 		return nil
 	}
 
@@ -257,23 +259,6 @@ func (mm *MarketMaker) secret(key []byte, address string, nonce int64) (secret, 
 	secretHash := sha256.Sum256(first[:])
 	s.Hash = hex.EncodeToString(secretHash[:])
 	return s, nil
-}
-
-func (mm *MarketMaker) findDuplicatesOrders(orders []atomex.Order) error {
-	for i := range orders {
-		mm.log.Info().Int64("id", orders[i].ID).Str("status", string(orders[i].Status)).Msg("find placed order")
-		var clientID clientOrderID
-		if err := clientID.parse(orders[i].ClientOrderID); err != nil {
-			return errors.Wrap(err, "cid.parse")
-		}
-
-		found := mm.cancelOrder(clientID)
-		if !found {
-			internalOrder := atomexOrderToInternal(orders[i])
-			mm.orders.Store(clientID, &internalOrder)
-		}
-	}
-	return nil
 }
 
 func (mm *MarketMaker) cancelAll(ctx context.Context) (cancelErr error) {
@@ -392,8 +377,22 @@ func (mm *MarketMaker) handleAtomexOrderUpdate(order atomex.OrderWebsocket) erro
 		}
 
 	case atomex.OrderStatusPartiallyFilled, atomex.OrderStatusFilled:
-		if err := mm.sendOneByOneLimits(true); err != nil {
-			return err
+		ticker, ok := mm.tickers[cid.symbol]
+		if !ok {
+			return nil
+		}
+
+		args := strategy.NewArgs().Ask(ticker.Ask).Bid(ticker.Bid).AskVolume(ticker.AskVolume).BidVolume(ticker.BidVolume).Symbol(cid.symbol)
+		for i := range mm.strategies {
+			quotes, err := mm.strategies[i].Quotes(args)
+			if err != nil {
+				return errors.Wrap(err, "Quotes")
+			}
+			for j := range quotes {
+				if err := mm.sendOrder(quotes[j], true); err != nil {
+					return errors.Wrap(err, "sendOrder")
+				}
+			}
 		}
 	case atomex.OrderStatusPending: // do not handle. it's internal atomex status.
 	case atomex.OrderStatusPlaced:

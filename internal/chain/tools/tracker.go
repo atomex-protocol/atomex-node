@@ -128,6 +128,7 @@ func (t *Tracker) Start(ctx context.Context) error {
 		}
 	} else {
 		t.restoreCounter = chainsCount
+		t.restored <- struct{}{}
 	}
 
 	if err := t.tezos.Run(ctx); err != nil {

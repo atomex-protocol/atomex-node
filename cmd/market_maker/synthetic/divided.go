@@ -50,11 +50,18 @@ func (d *Divided) Ticker(tick exchange.Ticker, tickers map[string]exchange.Ticke
 		return first, errors.Wrap(ErrUnknownTicker, secondSymbol)
 	}
 
-	return exchange.Ticker{
+	ticker := exchange.Ticker{
 		Symbol:    d.name,
-		Ask:       first.Ask.Div(second.Bid),
-		Bid:       first.Bid.Div(second.Ask),
 		AskVolume: decimal.Zero, // TODO: compute volume
 		BidVolume: decimal.Zero,
-	}, nil
+	}
+
+	if second.Bid.GreaterThan(decimal.Zero) {
+		ticker.Ask = first.Ask.Div(second.Bid)
+	}
+	if second.Ask.GreaterThan(decimal.Zero) {
+		ticker.Bid = first.Bid.Div(second.Ask)
+	}
+
+	return ticker, nil
 }

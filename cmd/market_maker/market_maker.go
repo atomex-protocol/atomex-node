@@ -105,6 +105,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		}
 	}
 
+	tickers := make(map[string]exchange.Ticker)
 	synthetics := make(map[string]synthetic.Synthetic)
 	for symbol, cfg := range cfg.QuoteProviderMeta.FromSymbols {
 		synth, err := synthetic.New(symbol, cfg)
@@ -112,6 +113,9 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 			return nil, err
 		}
 		synthetics[symbol] = synth
+		tickers[symbol] = exchange.Ticker{
+			Symbol: symbol,
+		}
 	}
 
 	return &MarketMaker{
@@ -132,7 +136,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		orders:            NewOrdersMap(),
 		swaps:             NewSwapsMap(),
 		secrets:           NewSecrets(),
-		tickers:           make(map[string]exchange.Ticker),
+		tickers:           tickers,
 		operations:        make(map[tools.OperationID]chain.Operation),
 		activeSwaps:       make([]atomex.Swap, 0),
 	}, nil
@@ -284,7 +288,7 @@ func (mm *MarketMaker) initialize(ctx context.Context) error {
 		return errors.Wrap(err, "initializeSwaps")
 	}
 
-	if err := mm.sendOneByOneLimits(true); err != nil {
+	if err := mm.sendOneByOneLimits(); err != nil {
 		return errors.Wrap(err, "sendOneByOneLimits")
 	}
 
@@ -309,12 +313,18 @@ func (mm *MarketMaker) initializeOrders(ctx context.Context) error {
 		}
 		offset += uint64(len(orders))
 		end = len(orders) != limitForAtomexRequest
-
-		if err := mm.findDuplicatesOrders(orders); err != nil {
-			return errors.Wrap(err, "findDuplicatesOrders")
+		for i := range orders {
+			if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
+				ID:     orders[i].ID,
+				Side:   orders[i].Side,
+				Symbol: orders[i].Symbol,
+			}); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
+
+	return mm.cancelAll(ctx)
 }
 
 func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
