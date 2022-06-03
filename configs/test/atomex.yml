@@ -3,7 +3,7 @@ wss: wss://ws.api.test.atomex.me/ws
 
 settings:
   reward_for_redeem: 0
-  lock_time: 3600
+  lock_time: 14400
 
 to_symbols:
   WBTC_tzBTC: WBTC/tzBTC
