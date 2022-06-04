@@ -33,59 +33,59 @@ func (mm *MarketMaker) listenTracker(ctx context.Context) {
 				current.Secret = swap.Secret
 			}
 
-			switch current.Status {
+			switch swap.Status {
 			case tools.StatusInitiated:
-				if current.IsUnknown() {
+				if swap.IsUnknown() {
 					continue
 				}
 
-				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("swap is initiated. redeeming...")
+				mm.log.Info().Str("hashed_secret", swap.HashedSecret.String()).Msg("swap is initiated. redeeming...")
 
-				if current.Secret.IsEmpty() {
-					secret, ok := mm.secrets.Get(current.HashedSecret)
+				if swap.Secret.IsEmpty() {
+					secret, ok := mm.secrets.Get(swap.HashedSecret)
 					if !ok {
-						if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+						if err := mm.restoreSecretFromTrackerAtomex(ctx, &swap); err != nil {
 							mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
 							continue
 						}
-						if current.Secret.IsEmpty() {
-							mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before redeem")
+						if swap.Secret.IsEmpty() {
+							mm.log.Error().Str("hashed_secret", swap.HashedSecret.String()).Msg("empty secret before redeem")
 							continue
 						}
 					} else {
-						current.Secret = secret
+						swap.Secret = secret
 					}
 				}
 
-				if err := mm.tracker.Redeem(ctx, *current, current.Acceptor); err != nil {
+				if err := mm.tracker.Redeem(ctx, swap, swap.Acceptor); err != nil {
 					mm.log.Err(err).Msg("tracker.Redeem")
 				}
 				continue
 
 			case tools.StatusRefundedOnce:
-				if current.IsUnknown() {
+				if swap.IsUnknown() {
 					continue
 				}
 
-				mm.log.Info().Str("hashed_secret", current.HashedSecret.String()).Msg("counterparty refunded swap. refunding...")
+				mm.log.Info().Str("hashed_secret", swap.HashedSecret.String()).Msg("counterparty refunded swap. refunding...")
 
-				if current.Secret.IsEmpty() {
-					secret, ok := mm.secrets.Get(current.HashedSecret)
+				if swap.Secret.IsEmpty() {
+					secret, ok := mm.secrets.Get(swap.HashedSecret)
 					if !ok {
-						if err := mm.restoreSecretFromTrackerAtomex(ctx, current); err != nil {
+						if err := mm.restoreSecretFromTrackerAtomex(ctx, &swap); err != nil {
 							mm.log.Err(err).Msg("restoreSecretFromTrackerAtomex")
 							continue
 						}
-						if current.Secret.IsEmpty() {
-							mm.log.Error().Str("hashed_secret", current.HashedSecret.String()).Msg("empty secret before refund")
+						if swap.Secret.IsEmpty() {
+							mm.log.Error().Str("hashed_secret", swap.HashedSecret.String()).Msg("empty secret before refund")
 							continue
 						}
 					} else {
-						current.Secret = secret
+						swap.Secret = secret
 					}
 				}
 
-				if err := mm.tracker.Refund(ctx, *current, current.Initiator); err != nil {
+				if err := mm.tracker.Refund(ctx, swap, swap.Initiator); err != nil {
 					mm.log.Err(err).Msg("tracker.Refund")
 				}
 

@@ -391,11 +391,11 @@ func (mm *MarketMaker) atomexSwapToInternal(swap atomex.Swap) (*tools.Swap, erro
 	var initiator, acceptor types.Asset
 	switch swap.Side {
 	case atomex.SideBuy:
-		initiator = info.Quote
-		acceptor = info.Base
-	case atomex.SideSell:
 		initiator = info.Base
 		acceptor = info.Quote
+	case atomex.SideSell:
+		initiator = info.Quote
+		acceptor = info.Base
 	}
 
 	initiatorStatus := atomexStatusToInternal(swap.User.Status)
