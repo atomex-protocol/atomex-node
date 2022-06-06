@@ -61,6 +61,13 @@ func (orders *OrdersMap) Delete(cid clientOrderID) {
 	orders.mx.Unlock()
 }
 
+func (orders *OrdersMap) Count() int {
+	orders.mx.RLock()
+	count := len(orders.m)
+	orders.mx.RUnlock()
+	return count
+}
+
 // Range -
 func (orders *OrdersMap) Range(handler func(cid clientOrderID, order *Order) bool) {
 	orders.mx.RLock()

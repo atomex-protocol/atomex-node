@@ -20,7 +20,6 @@ import (
 	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // MarketMaker -
@@ -106,6 +105,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		}
 	}
 
+	tickers := make(map[string]exchange.Ticker)
 	synthetics := make(map[string]synthetic.Synthetic)
 	for symbol, cfg := range cfg.QuoteProviderMeta.FromSymbols {
 		synth, err := synthetic.New(symbol, cfg)
@@ -113,6 +113,9 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 			return nil, err
 		}
 		synthetics[symbol] = synth
+		tickers[symbol] = exchange.Ticker{
+			Symbol: symbol,
+		}
 	}
 
 	return &MarketMaker{
@@ -133,7 +136,7 @@ func NewMarketMaker(cfg Config) (*MarketMaker, error) {
 		orders:            NewOrdersMap(),
 		swaps:             NewSwapsMap(),
 		secrets:           NewSecrets(),
-		tickers:           make(map[string]exchange.Ticker),
+		tickers:           tickers,
 		operations:        make(map[tools.OperationID]chain.Operation),
 		activeSwaps:       make([]atomex.Swap, 0),
 	}, nil
@@ -209,10 +212,6 @@ func (mm *MarketMaker) Start(ctx context.Context) error {
 		if err := mm.provider.Start(providerSymbols...); err != nil {
 			return errors.Wrap(err, "quoteProvider.Start")
 		}
-	}
-
-	if err := mm.initialize(ctx); err != nil {
-		log.Error().Err(err).Msg("initialization error")
 	}
 
 	return nil
@@ -314,16 +313,21 @@ func (mm *MarketMaker) initializeOrders(ctx context.Context) error {
 		}
 		offset += uint64(len(orders))
 		end = len(orders) != limitForAtomexRequest
-
-		if err := mm.findDuplicatesOrders(orders); err != nil {
-			return errors.Wrap(err, "findDuplicatesOrders")
+		for i := range orders {
+			if err := mm.atomex.CancelOrder(atomex.CancelOrderRequest{
+				ID:     orders[i].ID,
+				Side:   orders[i].Side,
+				Symbol: orders[i].Symbol,
+			}); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
+
+	return mm.cancelAll(ctx)
 }
 
 func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
-
 	for i := range mm.activeSwaps {
 		if mm.activeSwaps[i].User.Status != atomex.SwapStatusInvolved || mm.activeSwaps[i].CounterParty.Status != atomex.SwapStatusInvolved {
 			continue
@@ -343,8 +347,10 @@ func (mm *MarketMaker) initializeSwaps(ctx context.Context) error {
 			return errors.Wrap(err, "handleAtomexSwapUpdate")
 		}
 
-		if err := mm.initiateInvolvedSwap(ctx, mm.activeSwaps[i]); err != nil {
-			return errors.Wrap(err, "initiateInvolvedSwap")
+		if internalSwap.Status == tools.StatusEmpty {
+			if err := mm.initiateInvolvedSwap(ctx, mm.activeSwaps[i]); err != nil {
+				return errors.Wrap(err, "initiateInvolvedSwap")
+			}
 		}
 	}
 
@@ -385,11 +391,11 @@ func (mm *MarketMaker) atomexSwapToInternal(swap atomex.Swap) (*tools.Swap, erro
 	var initiator, acceptor types.Asset
 	switch swap.Side {
 	case atomex.SideBuy:
-		initiator = info.Quote
-		acceptor = info.Base
-	case atomex.SideSell:
 		initiator = info.Base
 		acceptor = info.Quote
+	case atomex.SideSell:
+		initiator = info.Quote
+		acceptor = info.Base
 	}
 
 	initiatorStatus := atomexStatusToInternal(swap.User.Status)

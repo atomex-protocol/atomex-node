@@ -273,7 +273,7 @@ func (e *Ethereum) Initiate(ctx context.Context, args chain.InitiateArgs) error 
 
 	switch args.Contract {
 	case e.cfg.EthContract:
-		tx, err = e.eth.Initiate(opts, hashedSecretBytes, participant, refundTime, big.NewInt(0), args.PayOff.BigInt(), true)
+		tx, err = e.eth.Initiate(opts, hashedSecretBytes, participant, refundTime, args.PayOff.BigInt())
 	case e.cfg.Erc20Contract:
 		address := common.HexToAddress(args.Contract)
 		tx, err = e.erc20.Initiate(opts, hashedSecretBytes, address, participant, refundTime, big.NewInt(0), args.Amount.BigInt(), args.PayOff.BigInt(), true)

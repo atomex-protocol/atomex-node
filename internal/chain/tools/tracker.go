@@ -27,6 +27,7 @@ type Tracker struct {
 	swaps         map[chain.Hex]*Swap
 	statusChanged chan Swap
 	operations    chan chain.Operation
+	restored      chan struct{}
 
 	wg sync.WaitGroup
 }
@@ -68,6 +69,7 @@ func NewTracker(cfg Config, opts ...TrackerOption) (*Tracker, error) {
 		swaps:         make(map[chain.Hex]*Swap),
 		operations:    make(chan chain.Operation, 1024),
 		statusChanged: make(chan Swap, 1024),
+		restored:      make(chan struct{}, 1),
 	}
 	for i := range opts {
 		opts[i](t)
@@ -85,6 +87,11 @@ func (t *Tracker) Operations() <-chan chain.Operation {
 	return t.operations
 }
 
+// Restored -
+func (t *Tracker) Restored() <-chan struct{} {
+	return t.restored
+}
+
 // Close -
 func (t *Tracker) Close() error {
 	t.wg.Wait()
@@ -98,6 +105,7 @@ func (t *Tracker) Close() error {
 
 	close(t.operations)
 	close(t.statusChanged)
+	close(t.restored)
 	return nil
 }
 
@@ -120,6 +128,7 @@ func (t *Tracker) Start(ctx context.Context) error {
 		}
 	} else {
 		t.restoreCounter = chainsCount
+		t.restored <- struct{}{}
 	}
 
 	if err := t.tezos.Run(ctx); err != nil {
@@ -185,6 +194,8 @@ func (t *Tracker) onEvent(event chain.Event) {
 			for id := range t.swaps {
 				t.statusChanged <- *t.swaps[id]
 			}
+			time.Sleep(10 * time.Second)
+			t.restored <- struct{}{}
 		}
 	}
 }
