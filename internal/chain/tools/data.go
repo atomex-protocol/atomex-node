@@ -6,17 +6,19 @@ import (
 	"github.com/atomex-protocol/watch_tower/internal/chain"
 	"github.com/atomex-protocol/watch_tower/internal/types"
 	"github.com/rs/zerolog"
+	"github.com/shopspring/decimal"
 )
 
 // Swap -
 type Swap struct {
-	HashedSecret chain.Hex
-	Secret       chain.Hex
-	Status       Status
-	RefundTime   time.Time
-	Initiator    Leg
-	Acceptor     Leg
-	Symbol       types.Symbol
+	HashedSecret    chain.Hex
+	Secret          chain.Hex
+	Status          Status
+	RefundTime      time.Time
+	RewardForRedeem decimal.Decimal
+	Initiator       Leg
+	Acceptor        Leg
+	Symbol          types.Symbol
 }
 
 // NewSwap -
@@ -46,6 +48,7 @@ func (swap *Swap) fromInitEvent(event chain.InitEvent) {
 	}
 
 	swap.RefundTime = event.RefundTime
+	swap.RewardForRedeem = event.PayOff
 
 	switch swap.Status {
 	case StatusEmpty:
