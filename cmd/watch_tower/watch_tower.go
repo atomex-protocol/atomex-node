@@ -9,6 +9,7 @@ import (
 	"github.com/atomex-protocol/watch_tower/internal/chain/tools"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 )
 
 // WatchTower -
@@ -167,10 +168,18 @@ func (wt *WatchTower) checkRefundTime(ctx context.Context) {
 }
 
 func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
-	if leg := swap.Leg(); leg != nil && swap.RefundTime.UTC().After(time.Now().UTC()) {
-		swap.RetryCount++
-		return wt.tracker.Redeem(ctx, swap.Swap, *leg)
+	var utcNow = time.Now().UTC()
 
+	if leg := swap.Leg(); leg != nil && swap.RefundTime.UTC().After(utcNow) {
+		if swap.RewardForRedeem.GreaterThan(decimal.Zero) {
+			swap.RetryCount++
+			return wt.tracker.Redeem(ctx, swap.Swap, *leg)
+		}
+
+		if swap.RewardForRedeem.IsZero() && utcNow.After(swap.RefundTime.Add(-time.Minute*30).UTC()) {
+			swap.RetryCount++
+			return wt.tracker.Redeem(ctx, swap.Swap, *leg)
+		}
 	}
 
 	return nil
