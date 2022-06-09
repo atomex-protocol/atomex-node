@@ -60,6 +60,8 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 	return wt, nil
 }
 
+const minus30Minutes = -time.Minute * 30
+
 // Run -
 func (wt *WatchTower) Run(ctx context.Context, restore bool) error {
 	wt.wg.Add(1)
@@ -117,6 +119,7 @@ func (wt *WatchTower) listen(ctx context.Context) {
 
 		// Manager channels
 		case <-ticker.C:
+			wt.checkRedeemTime(ctx)
 			wt.checkRefundTime(ctx)
 		}
 	}
@@ -167,6 +170,30 @@ func (wt *WatchTower) checkRefundTime(ctx context.Context) {
 	}
 }
 
+func (wt *WatchTower) checkRedeemTime(ctx context.Context) {
+	if !wt.needRedeem {
+		return
+	}
+
+	for _, swap := range wt.swaps {
+		if wt.stopped {
+			return
+		}
+
+		if swap.Status != tools.StatusRedeemedOnce {
+			continue
+		}
+
+		var utcNow = time.Now().UTC()
+		if utcNow.Before(swap.RefundTime.UTC()) && utcNow.After(swap.RefundTime.Add(minus30Minutes).UTC()) {
+			if err := wt.redeem(ctx, swap); err != nil {
+				log.Err(err).Msg("redeem")
+				continue
+			}
+		}
+	}
+}
+
 func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
 	var utcNow = time.Now().UTC()
 
@@ -176,7 +203,7 @@ func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
 			return wt.tracker.Redeem(ctx, swap.Swap, *leg)
 		}
 
-		if swap.RewardForRedeem.IsZero() && utcNow.After(swap.RefundTime.Add(-time.Minute*30).UTC()) {
+		if swap.RewardForRedeem.IsZero() && utcNow.After(swap.RefundTime.Add(minus30Minutes).UTC()) {
 			swap.RetryCount++
 			return wt.tracker.Redeem(ctx, swap.Swap, *leg)
 		}
