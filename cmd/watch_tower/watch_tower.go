@@ -155,8 +155,6 @@ func (wt *WatchTower) checkNextActionTime(ctx context.Context) {
 			return
 		}
 
-		var utcNow = time.Now().UTC()
-
 		if wt.needRedeem && swap.Status == tools.StatusRedeemedOnce {
 			if err := wt.redeem(ctx, swap); err != nil {
 				log.Err(err).Msg("redeem")
@@ -168,7 +166,7 @@ func (wt *WatchTower) checkNextActionTime(ctx context.Context) {
 				continue
 			}
 
-			if swap.RefundTime.UTC().Before(utcNow) {
+			if swap.RefundTime.UTC().Before(time.Now().UTC()) {
 				if err := wt.refund(ctx, swap); err != nil {
 					log.Err(err).Msg("refund")
 					continue
@@ -181,7 +179,7 @@ func (wt *WatchTower) checkNextActionTime(ctx context.Context) {
 }
 
 func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
-	var utcNow = time.Now().UTC()
+	utcNow := time.Now().UTC()
 
 	if leg := swap.Leg(); leg != nil && utcNow.Before(swap.RefundTime.UTC()) {
 		if swap.RewardForRedeem.IsPositive() {
