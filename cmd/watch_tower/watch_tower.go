@@ -60,7 +60,7 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 	return wt, nil
 }
 
-const minus30Minutes = -time.Minute * 30
+const minus30Minutes = -30 * time.Minute
 
 // Run -
 func (wt *WatchTower) Run(ctx context.Context, restore bool) error {
@@ -147,7 +147,7 @@ func (wt *WatchTower) onSwap(ctx context.Context, swap *Swap) error {
 }
 
 func (wt *WatchTower) checkNextActionTime(ctx context.Context) {
-	if !wt.needRefund {
+	if !wt.needRefund && !wt.needRedeem {
 		return
 	}
 
