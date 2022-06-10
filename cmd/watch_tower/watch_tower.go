@@ -196,6 +196,7 @@ func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
 		}
 
 		if swap.RewardForRedeem.IsZero() && utcNow.After(swap.RefundTime.Add(minus30Minutes).UTC()) {
+			log.Info().Msg("WatchTower starts redeem for swap with zero reward")
 			swap.RetryCount++
 			return wt.tracker.Redeem(ctx, swap.Swap, *leg)
 		}
