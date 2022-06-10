@@ -186,7 +186,7 @@ func (wt *WatchTower) checkNextActionTime(ctx context.Context) {
 func (wt *WatchTower) redeem(ctx context.Context, swap *Swap) error {
 	var utcNow = time.Now().UTC()
 
-	if leg := swap.Leg(); leg != nil && swap.RefundTime.UTC().After(utcNow) {
+	if leg := swap.Leg(); leg != nil && utcNow.Before(swap.RefundTime.UTC()) {
 		if swap.RewardForRedeem.GreaterThan(decimal.Zero) {
 			swap.RetryCount++
 			return wt.tracker.Redeem(ctx, swap.Swap, *leg)
