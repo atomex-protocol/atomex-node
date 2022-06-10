@@ -119,8 +119,7 @@ func (wt *WatchTower) listen(ctx context.Context) {
 
 		// Manager channels
 		case <-ticker.C:
-			wt.checkRedeemTime(ctx)
-			wt.checkRefundTime(ctx)
+			wt.checkNextActionTime(ctx)
 		}
 	}
 }
@@ -147,7 +146,7 @@ func (wt *WatchTower) onSwap(ctx context.Context, swap *Swap) error {
 	return nil
 }
 
-func (wt *WatchTower) checkRefundTime(ctx context.Context) {
+func (wt *WatchTower) checkNextActionTime(ctx context.Context) {
 	if !wt.needRefund {
 		return
 	}
@@ -156,39 +155,32 @@ func (wt *WatchTower) checkRefundTime(ctx context.Context) {
 		if wt.stopped {
 			return
 		}
-		if swap.IsUnknown() {
-			continue
-		}
-
-		if swap.RefundTime.UTC().Before(time.Now().UTC()) {
-			if err := wt.refund(ctx, swap); err != nil {
-				log.Err(err).Msg("refund")
-				continue
-			}
-			delete(wt.swaps, hashedSecret)
-		}
-	}
-}
-
-func (wt *WatchTower) checkRedeemTime(ctx context.Context) {
-	if !wt.needRedeem {
-		return
-	}
-
-	for _, swap := range wt.swaps {
-		if wt.stopped {
-			return
-		}
-
-		if swap.Status != tools.StatusRedeemedOnce {
-			continue
-		}
 
 		var utcNow = time.Now().UTC()
-		if utcNow.Before(swap.RefundTime.UTC()) && utcNow.After(swap.RefundTime.Add(minus30Minutes).UTC()) {
-			if err := wt.redeem(ctx, swap); err != nil {
-				log.Err(err).Msg("redeem")
+
+		if wt.needRedeem {
+			if swap.Status != tools.StatusRedeemedOnce {
 				continue
+			}
+
+			if utcNow.Before(swap.RefundTime.UTC()) && utcNow.After(swap.RefundTime.Add(minus30Minutes).UTC()) {
+				if err := wt.redeem(ctx, swap); err != nil {
+					log.Err(err).Msg("redeem")
+				}
+			}
+		}
+
+		if wt.needRefund {
+			if swap.IsUnknown() {
+				continue
+			}
+
+			if swap.RefundTime.UTC().Before(utcNow) {
+				if err := wt.refund(ctx, swap); err != nil {
+					log.Err(err).Msg("refund")
+					continue
+				}
+				delete(wt.swaps, hashedSecret)
 			}
 		}
 	}
