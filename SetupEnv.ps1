@@ -1,7 +1,7 @@
 $envFilePath = "./.env"
-$isEnvExist = Test-Path -Path $envFilePath
+$isEnvFileExist = Test-Path -Path $envFilePath
 
-if (-not($isEnvExist)) {
+if (-not($isEnvFileExist)) {
 	Write-Host "Should be initialized .env file with requred variables first."
 	Write-Host "Docs: https://github.com/atomex-protocol/atomex-node#environment-variables"
 
