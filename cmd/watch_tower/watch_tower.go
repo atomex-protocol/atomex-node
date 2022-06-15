@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -91,6 +92,9 @@ func (wt *WatchTower) listen(ctx context.Context) {
 	ticker := time.NewTicker(time.Second * 30)
 	defer ticker.Stop()
 
+	heartbeatTicker := time.NewTicker(time.Minute)
+	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -119,6 +123,9 @@ func (wt *WatchTower) listen(ctx context.Context) {
 		// Manager channels
 		case <-ticker.C:
 			wt.checkNextActionTime(ctx)
+
+		case <-heartbeatTicker.C:
+			wt.heartbeat()
 		}
 	}
 }
@@ -241,4 +248,14 @@ func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation
 	}
 
 	return nil
+}
+
+func (wt *WatchTower) heartbeat() {
+	res, err := http.Head("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK")
+
+	if err != nil || res.StatusCode != http.StatusOK {
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be, response: %v", res)
+	} else {
+		log.Info().Msgf("Heartbeat successfully sent")
+	}
 }
