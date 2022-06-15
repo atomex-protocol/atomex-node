@@ -17,3 +17,5 @@
 
 .vscode/
 !.vscode/launch.json
+
+.idea
