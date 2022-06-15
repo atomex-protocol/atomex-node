@@ -92,7 +92,7 @@ func (wt *WatchTower) listen(ctx context.Context) {
 	ticker := time.NewTicker(time.Second * 30)
 	defer ticker.Stop()
 
-	heartbeatTicker := time.NewTicker(time.Minute)
+	heartbeatTicker := time.NewTicker(time.Hour)
 	defer heartbeatTicker.Stop()
 
 	for {
@@ -254,8 +254,11 @@ func (wt *WatchTower) heartbeat() {
 	res, err := http.Head("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK")
 
 	if err != nil || res.StatusCode != http.StatusOK {
-		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be, response: %v", res)
-	} else {
-		log.Info().Msgf("Heartbeat successfully sent")
+		var code int
+		if res != nil {
+			code = res.StatusCode
+		}
+
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be, response: { code: %v }", code)
 	}
 }
