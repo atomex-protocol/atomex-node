@@ -253,7 +253,7 @@ func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation
 
 func (wt *WatchTower) heartbeat() {
 	swapCount := len(wt.swaps)
-	requestUri := fmt.Sprintf("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK,%%20swaps%%20%d", swapCount)
+	requestUri := fmt.Sprintf("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK,%%20%d%%20swaps", swapCount)
 
 	res, err := http.Head(requestUri)
 
