@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type WatchTower struct {
 	needRedeem bool
 	needRefund bool
 	retryCount uint
+	uptimeAPI  string
 
 	stopped bool
 	wg      sync.WaitGroup
@@ -41,6 +43,7 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 	wt := &WatchTower{
 		tracker:    track,
 		retryCount: cfg.RetryCountOnFailedTx,
+		uptimeAPI:  cfg.General.Atomex.UptimeAPI,
 		operations: make(map[tools.OperationID]chain.Operation),
 		swaps:      make(map[chain.Hex]*Swap),
 	}
@@ -92,7 +95,7 @@ func (wt *WatchTower) listen(ctx context.Context) {
 	ticker := time.NewTicker(time.Second * 30)
 	defer ticker.Stop()
 
-	heartbeatTicker := time.NewTicker(time.Minute)
+	heartbeatTicker := time.NewTicker(time.Hour)
 	defer heartbeatTicker.Stop()
 
 	for {
@@ -251,11 +254,18 @@ func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation
 }
 
 func (wt *WatchTower) heartbeat() {
-	res, err := http.Head("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK")
+	requestUri := fmt.Sprintf("%s?msg=OK,%%20%d%%20swaps", wt.uptimeAPI, len(wt.swaps))
+	res, err := http.Head(requestUri)
 
-	if err != nil || res.StatusCode != http.StatusOK {
-		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be, response: %v", res)
-	} else {
-		log.Info().Msgf("Heartbeat successfully sent")
+	if err != nil {
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be sent")
+	} else if res != nil && res.StatusCode != http.StatusOK {
+		var location string
+
+		if url, errLoc := res.Location(); errLoc != nil {
+			location = url.String()
+		}
+
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be sent; response: { code: %v, location: %v }", res.StatusCode, location)
 	}
 }

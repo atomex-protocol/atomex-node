@@ -1,5 +1,6 @@
 rest_api: https://api.atomex.me/v1
 wss: wss://ws.api.atomex.me/ws
+uptimeUri: http://uptime_kuma:3001/api/push/8uaZDIesoO
 
 settings:
   reward_for_redeem: 0
