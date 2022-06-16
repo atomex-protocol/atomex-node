@@ -252,23 +252,18 @@ func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation
 }
 
 func (wt *WatchTower) heartbeat() {
-	swapCount := len(wt.swaps)
-	requestUri := fmt.Sprintf("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK,%%20%d%%20swaps", swapCount)
-
+	requestUri := fmt.Sprintf("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK,%%20%d%%20swaps", len(wt.swaps))
 	res, err := http.Head(requestUri)
 
-	if err != nil || res.StatusCode != http.StatusOK {
-		var code int
+	if err != nil {
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be sent")
+	} else if res != nil && res.StatusCode != http.StatusOK {
 		var location string
 
-		if res != nil {
-			code = res.StatusCode
-
-			if url, errLoc := res.Location(); errLoc != nil {
-				location = url.String()
-			}
+		if url, errLoc := res.Location(); errLoc != nil {
+			location = url.String()
 		}
 
-		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be sent; response: { code: %v, location: %v }", code, location)
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be sent; response: { code: %v, location: %v }", res.StatusCode, location)
 	}
 }
