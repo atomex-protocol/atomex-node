@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -251,14 +252,23 @@ func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation
 }
 
 func (wt *WatchTower) heartbeat() {
-	res, err := http.Head("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK")
+	swapCount := len(wt.swaps)
+	requestUri := fmt.Sprintf("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK,%%20swaps%%20%d", swapCount)
+
+	res, err := http.Head(requestUri)
 
 	if err != nil || res.StatusCode != http.StatusOK {
 		var code int
+		var location string
+
 		if res != nil {
 			code = res.StatusCode
+
+			if url, errLoc := res.Location(); errLoc != nil {
+				location = url.String()
+			}
 		}
 
-		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be, response: { code: %v }", code)
+		log.Err(err).Msgf("WatchTower 'stay alive' heartbeat failed to be sent; response: { code: %v, location: %v }", code, location)
 	}
 }
