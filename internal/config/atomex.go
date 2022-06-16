@@ -7,6 +7,7 @@ type Atomex struct {
 	Settings    AtomexSetiings    `yaml:"settings"`
 	RestAPI     string            `yaml:"rest_api" validate:"required,uri"`
 	WsAPI       string            `yaml:"wss" validate:"required,uri"`
+	UptimeAPI   string            `yaml:"uptimeUri" validate:"required,uri"`
 }
 
 // AtomexSetiings -

@@ -22,6 +22,7 @@ type WatchTower struct {
 	needRedeem bool
 	needRefund bool
 	retryCount uint
+	uptimeAPI  string
 
 	stopped bool
 	wg      sync.WaitGroup
@@ -42,6 +43,7 @@ func NewWatchTower(cfg Config) (*WatchTower, error) {
 	wt := &WatchTower{
 		tracker:    track,
 		retryCount: cfg.RetryCountOnFailedTx,
+		uptimeAPI:  cfg.General.Atomex.UptimeAPI,
 		operations: make(map[tools.OperationID]chain.Operation),
 		swaps:      make(map[chain.Hex]*Swap),
 	}
@@ -252,7 +254,7 @@ func (wt *WatchTower) onOperation(ctx context.Context, operation chain.Operation
 }
 
 func (wt *WatchTower) heartbeat() {
-	requestUri := fmt.Sprintf("http://uptime_kuma:3001/api/push/8uaZDIesoO?msg=OK,%%20%d%%20swaps", len(wt.swaps))
+	requestUri := fmt.Sprintf("%s?msg=OK,%%20%d%%20swaps", wt.uptimeAPI, len(wt.swaps))
 	res, err := http.Head(requestUri)
 
 	if err != nil {
