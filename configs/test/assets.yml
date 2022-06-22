@@ -13,7 +13,7 @@ USDT_tez:
   name: USDT
   chain: tezos
   contract: KT1BWvRQnVVowZZLGkct9A7sdj5YEe8CdUhR
-  atomex_contract: KT1RdvbJcdjy64gfNL9Q1M9xjyn4pb68yfr3
+  atomex_contract: KT1HHjNxi3okxxGJT1SPPhpcs3gMQt8hqixY
   decimals: 6
 ETH:
   name: ETH

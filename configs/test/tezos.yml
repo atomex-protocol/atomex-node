@@ -24,12 +24,11 @@ KT1Jj1jzDQbDRHt4u7M73DUrBDV1napRbNFr:
     initiate: "1000"
     redeem: "3000"
     refund: "10000"
-KT1RdvbJcdjy64gfNL9Q1M9xjyn4pb68yfr3:
+KT1HHjNxi3okxxGJT1SPPhpcs3gMQt8hqixY:
   gas_limit:
     initiate: "12000"
     redeem: "13000"
     refund: "480000"
-
   storage_limit:
     initiate: "257"
     redeem: "257"
