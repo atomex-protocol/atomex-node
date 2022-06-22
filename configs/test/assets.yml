@@ -9,6 +9,12 @@ XTZ:
   chain: tezos
   atomex_contract: KT1SJMtHZFSPva5AzQEx5btBuQ8BjvXqort3
   decimals: 6
+USDT_tez:
+  name: USDT
+  chain: tezos
+  contract: KT1BWvRQnVVowZZLGkct9A7sdj5YEe8CdUhR
+  atomex_contract: KT1RdvbJcdjy64gfNL9Q1M9xjyn4pb68yfr3
+  decimals: 6
 ETH:
   name: ETH
   chain: ethereum
@@ -18,5 +24,5 @@ ETH:
 #   name: USDT
 #   chain: ethereum
 #   atomex_contract: 0xAc5881D77Db9340c94F53300736a9cf9e61fA25E
-#   decimals: 18
+#   decimals: 6
 
