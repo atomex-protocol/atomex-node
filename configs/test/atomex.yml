@@ -8,13 +8,13 @@ settings:
 
 to_symbols:
   WBTC_tzBTC: WBTC/tzBTC
-  XTZ_USDT: XTZ/USDT
+  XTZ_USDT_tez: XTZ/USDT
   KUSD_USDT: KUSD/USDT
   XTZ_ETH: XTZ/ETH
 
 from_symbols:
   WBTC/tzBTC: WBTC_tzBTC
-  XTZ/USDT: XTZ_USDT
+  XTZ/USDT: XTZ_USDT_tez
   KUSD/USDT: KUSD_USDT
   XTZ/ETH: XTZ_ETH
   

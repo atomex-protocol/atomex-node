@@ -147,12 +147,17 @@ func (e InitEvent) HashedSecret() Hex {
 }
 
 // SetPayOff -
-func (event *InitEvent) SetPayOff(payoff *big.Int, minPayoff decimal.Decimal) error {
+func (e *InitEvent) SetPayOff(payoff *big.Int, minPayoff decimal.Decimal) error {
+	if payoff == nil { // If payoff is empty or not supported.
+		e.PayOff = decimal.Zero
+		return nil
+	}
+
 	payoffDecimal := decimal.NewFromBigInt(payoff, 0)
 	if minPayoff.Cmp(payoffDecimal) > 0 {
 		return ErrMinPayoff
 	}
-	event.PayOff = payoffDecimal
+	e.PayOff = payoffDecimal
 	return nil
 }
 
