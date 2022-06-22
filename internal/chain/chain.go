@@ -127,22 +127,22 @@ type InitEvent struct {
 }
 
 // Level -
-func (e *InitEvent) Level() uint64 {
+func (e InitEvent) Level() uint64 {
 	return e.BlockNumber
 }
 
 // Contract -
-func (e *InitEvent) Contract() string {
+func (e InitEvent) Contract() string {
 	return e.ContractAddress
 }
 
 // ChainType -
-func (e *InitEvent) ChainType() ChainType {
+func (e InitEvent) ChainType() ChainType {
 	return e.Chain
 }
 
 // HashedSecret -
-func (e *InitEvent) HashedSecret() Hex {
+func (e InitEvent) HashedSecret() Hex {
 	return e.HashedSecretHex
 }
 
