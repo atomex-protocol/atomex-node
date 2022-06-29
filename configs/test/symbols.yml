@@ -10,3 +10,6 @@
 - name: XTZ_ETH
   base: XTZ
   quote: ETH
+- name: XTZ_USDT_tez
+  base: XTZ
+  quote: USDT_tez

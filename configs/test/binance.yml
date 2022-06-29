@@ -1,8 +1,8 @@
 to_symbols:
-  XTZUSDT: XTZ_USDT
+  XTZUSDT: XTZ_USDT_tez
   ETHUSDT: ETH_USDT
 from_symbols:
-  XTZ_USDT:
+  XTZ_USDT_tez:
     type: direct
     symbols:
       - XTZUSDT
